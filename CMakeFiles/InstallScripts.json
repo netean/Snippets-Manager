@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/iain/Dev/snippets/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

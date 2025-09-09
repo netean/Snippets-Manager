@@ -1,0 +1,3 @@
+# Hashes of file build rules.
+ec4052f877b46122d7129814ee209091 CMakeFiles/snippetmanager_autogen
+93a7a19e588f7ca466f2899d5f3a15c8 snippetmanager_autogen/timestamp
