@@ -7,6 +7,7 @@ snippetmanager: \
   CMakeFiles/snippetmanager.dir/src/mainwindow.cpp.o \
   CMakeFiles/snippetmanager.dir/src/snippetmodel.cpp.o \
   CMakeFiles/snippetmanager.dir/src/database.cpp.o \
+  CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o \
   /usr/lib/libQt6Widgets.so.6.9.2 \
   /usr/lib/libQt6Sql.so.6.9.2 \
   /usr/lib/libQt6Gui.so.6.9.2 \
@@ -100,6 +101,8 @@ CMakeFiles/snippetmanager.dir/src/mainwindow.cpp.o:
 CMakeFiles/snippetmanager.dir/src/snippetmodel.cpp.o:
 
 CMakeFiles/snippetmanager.dir/src/database.cpp.o:
+
+CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o:
 
 /usr/lib/libQt6Widgets.so.6.9.2:
 

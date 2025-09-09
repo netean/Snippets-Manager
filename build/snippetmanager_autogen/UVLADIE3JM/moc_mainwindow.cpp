@@ -44,6 +44,7 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         "",
         "onSearchTextChanged",
         "onAddSnippet",
+        "onEditSnippet",
         "onSaveSnippet",
         "onDeleteSnippet",
         "onCopySnippet",
@@ -58,16 +59,18 @@ template <> constexpr inline auto MainWindow::qt_create_metaobjectdata<qt_meta_t
         QtMocHelpers::SlotData<void()>(3, 2, QMC::AccessPrivate, QMetaType::Void),
         // Slot 'onAddSnippet'
         QtMocHelpers::SlotData<void()>(4, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onSaveSnippet'
+        // Slot 'onEditSnippet'
         QtMocHelpers::SlotData<void()>(5, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onDeleteSnippet'
+        // Slot 'onSaveSnippet'
         QtMocHelpers::SlotData<void()>(6, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onCopySnippet'
+        // Slot 'onDeleteSnippet'
         QtMocHelpers::SlotData<void()>(7, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onTitleChanged'
+        // Slot 'onCopySnippet'
         QtMocHelpers::SlotData<void()>(8, 2, QMC::AccessPrivate, QMetaType::Void),
-        // Slot 'onContentChanged'
+        // Slot 'onTitleChanged'
         QtMocHelpers::SlotData<void()>(9, 2, QMC::AccessPrivate, QMetaType::Void),
+        // Slot 'onContentChanged'
+        QtMocHelpers::SlotData<void()>(10, 2, QMC::AccessPrivate, QMetaType::Void),
     };
     QtMocHelpers::UintData qt_properties {
     };
@@ -94,11 +97,12 @@ void MainWindow::qt_static_metacall(QObject *_o, QMetaObject::Call _c, int _id, 
         case 0: _t->onSelectionChanged(); break;
         case 1: _t->onSearchTextChanged(); break;
         case 2: _t->onAddSnippet(); break;
-        case 3: _t->onSaveSnippet(); break;
-        case 4: _t->onDeleteSnippet(); break;
-        case 5: _t->onCopySnippet(); break;
-        case 6: _t->onTitleChanged(); break;
-        case 7: _t->onContentChanged(); break;
+        case 3: _t->onEditSnippet(); break;
+        case 4: _t->onSaveSnippet(); break;
+        case 5: _t->onDeleteSnippet(); break;
+        case 6: _t->onCopySnippet(); break;
+        case 7: _t->onTitleChanged(); break;
+        case 8: _t->onContentChanged(); break;
         default: ;
         }
     }
@@ -124,14 +128,14 @@ int MainWindow::qt_metacall(QMetaObject::Call _c, int _id, void **_a)
     if (_id < 0)
         return _id;
     if (_c == QMetaObject::InvokeMetaMethod) {
-        if (_id < 8)
+        if (_id < 9)
             qt_static_metacall(this, _c, _id, _a);
-        _id -= 8;
+        _id -= 9;
     }
     if (_c == QMetaObject::RegisterMethodArgumentMetaType) {
-        if (_id < 8)
+        if (_id < 9)
             *reinterpret_cast<QMetaType *>(_a[0]) = QMetaType();
-        _id -= 8;
+        _id -= 9;
     }
     return _id;
 }

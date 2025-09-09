@@ -3,6 +3,8 @@ file(REMOVE_RECURSE
   "CMakeFiles/snippetmanager_autogen.dir/AutogenUsed.txt"
   "CMakeFiles/snippetmanager_autogen.dir/ParseCache.txt"
   "snippetmanager_autogen"
+  "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o"
+  "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o.d"
   "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/mocs_compilation.cpp.o"
   "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/mocs_compilation.cpp.o.d"
   "CMakeFiles/snippetmanager.dir/src/database.cpp.o"
@@ -15,6 +17,7 @@ file(REMOVE_RECURSE
   "CMakeFiles/snippetmanager.dir/src/snippetmodel.cpp.o.d"
   "snippetmanager"
   "snippetmanager.pdb"
+  "snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp"
   "snippetmanager_autogen/mocs_compilation.cpp"
   "snippetmanager_autogen/timestamp"
 )

@@ -9,6 +9,7 @@ set(CMAKE_DEPENDS_LANGUAGES
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
   "" "snippetmanager_autogen/timestamp" "custom" "snippetmanager_autogen/deps"
+  "/home/iain/Dev/snippets/build/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp" "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o" "gcc" "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o.d"
   "/home/iain/Dev/snippets/build/snippetmanager_autogen/mocs_compilation.cpp" "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/mocs_compilation.cpp.o" "gcc" "CMakeFiles/snippetmanager.dir/snippetmanager_autogen/mocs_compilation.cpp.o.d"
   "/home/iain/Dev/snippets/src/database.cpp" "CMakeFiles/snippetmanager.dir/src/database.cpp.o" "gcc" "CMakeFiles/snippetmanager.dir/src/database.cpp.o.d"
   "/home/iain/Dev/snippets/src/main.cpp" "CMakeFiles/snippetmanager.dir/src/main.cpp.o" "gcc" "CMakeFiles/snippetmanager.dir/src/main.cpp.o.d"

@@ -155,6 +155,30 @@ snippetmanager_autogen/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/snippetmanager_autogen.dir/build.make CMakeFiles/snippetmanager_autogen.dir/build
 .PHONY : snippetmanager_autogen/fast
 
+snippetmanager_autogen/3YJK5W5UP7/qrc_resources.o: snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o
+.PHONY : snippetmanager_autogen/3YJK5W5UP7/qrc_resources.o
+
+# target to build an object file
+snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/snippetmanager.dir/build.make CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o
+.PHONY : snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.o
+
+snippetmanager_autogen/3YJK5W5UP7/qrc_resources.i: snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.i
+.PHONY : snippetmanager_autogen/3YJK5W5UP7/qrc_resources.i
+
+# target to preprocess a source file
+snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/snippetmanager.dir/build.make CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.i
+.PHONY : snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.i
+
+snippetmanager_autogen/3YJK5W5UP7/qrc_resources.s: snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.s
+.PHONY : snippetmanager_autogen/3YJK5W5UP7/qrc_resources.s
+
+# target to generate assembly for a file
+snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/snippetmanager.dir/build.make CMakeFiles/snippetmanager.dir/snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.s
+.PHONY : snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp.s
+
 snippetmanager_autogen/mocs_compilation.o: snippetmanager_autogen/mocs_compilation.cpp.o
 .PHONY : snippetmanager_autogen/mocs_compilation.o
 
@@ -286,6 +310,9 @@ help:
 	@echo "... snippetmanager_autogen"
 	@echo "... snippetmanager_autogen_timestamp_deps"
 	@echo "... snippetmanager"
+	@echo "... snippetmanager_autogen/3YJK5W5UP7/qrc_resources.o"
+	@echo "... snippetmanager_autogen/3YJK5W5UP7/qrc_resources.i"
+	@echo "... snippetmanager_autogen/3YJK5W5UP7/qrc_resources.s"
 	@echo "... snippetmanager_autogen/mocs_compilation.o"
 	@echo "... snippetmanager_autogen/mocs_compilation.i"
 	@echo "... snippetmanager_autogen/mocs_compilation.s"

@@ -662,7 +662,8 @@
 		"/usr/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginTargets.cmake",
 		"/usr/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginTargets-relwithdebinfo.cmake",
 		"/usr/lib/cmake/Qt6Sql/Qt6QSQLiteDriverPluginAdditionalTargetInfo.cmake",
-		"/usr/lib/cmake/Qt6Sql/Qt6SqlVersionlessAliasTargets.cmake"
+		"/usr/lib/cmake/Qt6Sql/Qt6SqlVersionlessAliasTargets.cmake",
+		"/home/iain/Dev/snippets/resources/resources.qrc"
 	],
 	"CMAKE_SOURCE_DIR" : "/home/iain/Dev/snippets",
 	"CROSS_CONFIG" : false,

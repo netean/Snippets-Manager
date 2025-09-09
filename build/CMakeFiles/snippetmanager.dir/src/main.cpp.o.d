@@ -378,7 +378,9 @@ CMakeFiles/snippetmanager.dir/src/main.cpp.o: \
  /usr/include/c++/15.2.1/bits/fs_ops.h \
  /usr/include/qt6/QtCore/qfileinfo.h /usr/include/qt6/QtCore/qtimezone.h \
  /usr/include/qt6/QtCore/QStandardPaths \
- /usr/include/qt6/QtCore/qstandardpaths.h \
+ /usr/include/qt6/QtCore/qstandardpaths.h /usr/include/qt6/QtGui/QIcon \
+ /usr/include/qt6/QtGui/qicon.h /usr/include/qt6/QtCore/QDebug \
+ /usr/include/qt6/QtCore/qdebug.h \
  /home/iain/Dev/snippets/src/mainwindow.h \
  /usr/include/qt6/QtWidgets/QMainWindow \
  /usr/include/qt6/QtWidgets/qmainwindow.h \

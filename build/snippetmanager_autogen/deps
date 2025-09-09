@@ -4,6 +4,7 @@ snippetmanager_autogen/timestamp: \
 	/home/iain/Dev/snippets/build/CMakeFiles/4.1.1/CMakeCXXCompiler.cmake \
 	/home/iain/Dev/snippets/build/CMakeFiles/4.1.1/CMakeSystem.cmake \
 	/home/iain/Dev/snippets/build/snippetmanager_autogen/moc_predefs.h \
+	/home/iain/Dev/snippets/resources/resources.qrc \
 	/home/iain/Dev/snippets/src/database.cpp \
 	/home/iain/Dev/snippets/src/database.h \
 	/home/iain/Dev/snippets/src/main.cpp \
