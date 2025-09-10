@@ -1,0 +1,12 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Snippet Manager
+Comment=Text and Code Snippet Manager
+Exec=snippetmanager
+Icon=snippetmanager
+Terminal=false
+Categories=Utility;TextEditor;Development;
+Keywords=snippet;text;code;manager;clipboard;
+StartupNotify=true
+MimeType=text/plain;

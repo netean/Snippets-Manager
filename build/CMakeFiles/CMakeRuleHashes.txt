@@ -1,0 +1,4 @@
+# Hashes of file build rules.
+5b9a01fb0c8c6badb11130ade55de048 CMakeFiles/snippetmanager_autogen
+9186cc259ad306c99548b25679655288 snippetmanager_autogen/3YJK5W5UP7/qrc_resources.cpp
+f75b5203528c3e26f5f21a6bfe982439 snippetmanager_autogen/timestamp

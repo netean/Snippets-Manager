@@ -25,6 +25,7 @@ private slots:
     void onSelectionChanged();
     void onSearchTextChanged();
     void onAddSnippet();
+    void onEditSnippet();
     void onSaveSnippet();
     void onDeleteSnippet();
     void onCopySnippet();
@@ -44,10 +45,12 @@ private:
     QLineEdit *m_searchEdit;
     QListView *m_snippetList;
     QPushButton *m_addButton;
+    QPushButton *m_editButton;
     QPushButton *m_deleteButton;
     
     // Right panel
     QWidget *m_rightPanel;
+    QLabel *m_modeLabel;
     QLineEdit *m_titleEdit;
     QTextEdit *m_contentEdit;
     QPushButton *m_saveButton;

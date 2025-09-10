@@ -4,6 +4,12 @@
 #include <QClipboard>
 #include <QMessageBox>
 #include <QHeaderView>
+#include <QStatusBar>
+#include <QIcon>
+#include <QDebug>
+#include <QDir>
+#include <QCoreApplication>
+#include <QFile>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -25,6 +31,7 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onSelectionChanged);
     connect(m_searchEdit, &QLineEdit::textChanged, [this]() { m_searchTimer->start(); });
     connect(m_addButton, &QPushButton::clicked, this, &MainWindow::onAddSnippet);
+    connect(m_editButton, &QPushButton::clicked, this, &MainWindow::onEditSnippet);
     connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::onDeleteSnippet);
     connect(m_saveButton, &QPushButton::clicked, this, &MainWindow::onSaveSnippet);
     connect(m_copyButton, &QPushButton::clicked, this, &MainWindow::onCopySnippet);
@@ -33,8 +40,29 @@ MainWindow::MainWindow(QWidget *parent)
     
     updateButtonStates();
     
-    setWindowTitle("Snippet Manager");
+    setWindowTitle("Snippet Manager - Text & Code Snippets");
+    
+    // The application icon is set in main.cpp, but we can override for this window if needed
+    QIcon windowIcon = QApplication::windowIcon();
+    if (!windowIcon.isNull()) {
+        setWindowIcon(windowIcon);
+        qDebug() << "Window icon inherited from application";
+    } else {
+        // Fallback icon loading if application icon wasn't set
+        QIcon icon(":/icon.png");
+        if (icon.isNull()) {
+            icon = QIcon(":/icon.svg");
+        }
+        if (!icon.isNull()) {
+            setWindowIcon(icon);
+            qDebug() << "Window icon set from resources";
+        }
+    }
+    
     resize(800, 600);
+    
+    // Add status bar
+    statusBar()->showMessage("Select a snippet to edit, or click 'Add' to create a new one");
 }
 
 MainWindow::~MainWindow()
@@ -62,14 +90,20 @@ void MainWindow::setupUI()
     
     QHBoxLayout *leftButtonLayout = new QHBoxLayout;
     m_addButton = new QPushButton("Add");
+    m_editButton = new QPushButton("Edit");
     m_deleteButton = new QPushButton("Delete");
     leftButtonLayout->addWidget(m_addButton);
+    leftButtonLayout->addWidget(m_editButton);
     leftButtonLayout->addWidget(m_deleteButton);
     leftLayout->addLayout(leftButtonLayout);
     
     // Right panel
     m_rightPanel = new QWidget;
     QVBoxLayout *rightLayout = new QVBoxLayout(m_rightPanel);
+    
+    m_modeLabel = new QLabel("Select a snippet to view");
+    m_modeLabel->setStyleSheet("font-weight: bold; color: #666;");
+    rightLayout->addWidget(m_modeLabel);
     
     rightLayout->addWidget(new QLabel("Title:"));
     m_titleEdit = new QLineEdit;
@@ -106,11 +140,21 @@ void MainWindow::onSelectionChanged()
         m_titleEdit->setText(snippet.title);
         m_contentEdit->setPlainText(snippet.content);
         m_isModified = false;
+        
+        // Make fields read-only by default, user clicks Edit to modify
+        m_titleEdit->setEnabled(false);
+        m_contentEdit->setEnabled(false);
+        m_modeLabel->setText("Viewing snippet - Click 'Edit' to modify");
+        statusBar()->showMessage("Viewing snippet - Click 'Edit' to modify");
     } else {
         m_currentSnippetId = -1;
         m_titleEdit->clear();
         m_contentEdit->clear();
         m_isModified = false;
+        m_titleEdit->setEnabled(false);
+        m_contentEdit->setEnabled(false);
+        m_modeLabel->setText("Select a snippet to view");
+        statusBar()->showMessage("Select a snippet to view, or click 'Add' to create a new one");
     }
     
     updateButtonStates();
@@ -137,7 +181,19 @@ void MainWindow::onAddSnippet()
         m_snippetList->setCurrentIndex(firstIndex);
         m_titleEdit->selectAll();
         m_titleEdit->setFocus();
+        m_titleEdit->setEnabled(true);
+        m_contentEdit->setEnabled(true);
     }
+}
+
+void MainWindow::onEditSnippet()
+{
+    m_titleEdit->setEnabled(true);
+    m_contentEdit->setEnabled(true);
+    m_titleEdit->setFocus();
+    m_modeLabel->setText("Editing snippet - Make changes and click 'Save'");
+    statusBar()->showMessage("Editing snippet - Make changes and click 'Save'");
+    updateButtonStates();
 }
 
 void MainWindow::onSaveSnippet()
@@ -190,9 +246,11 @@ void MainWindow::updateButtonStates()
 {
     bool hasSelection = m_currentSnippetId != -1;
     bool hasContent = !m_contentEdit->toPlainText().isEmpty();
+    bool isEditing = m_titleEdit->isEnabled();
     
+    m_editButton->setEnabled(hasSelection && !isEditing);
     m_deleteButton->setEnabled(hasSelection);
-    m_saveButton->setEnabled(m_isModified && hasSelection);
+    m_saveButton->setEnabled(m_isModified && hasSelection && isEditing);
     m_copyButton->setEnabled(hasContent);
 }
 
@@ -210,6 +268,7 @@ void MainWindow::saveCurrentSnippet()
             m_isModified = false;
             m_model->refresh();
             updateButtonStates();
+            statusBar()->showMessage("Snippet saved successfully", 2000);
         }
     }
 }
