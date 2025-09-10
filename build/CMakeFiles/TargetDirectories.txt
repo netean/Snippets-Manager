@@ -1,5 +1,0 @@
-/home/iain/Dev/snippets/build/CMakeFiles/snippetmanager.dir
-/home/iain/Dev/snippets/build/CMakeFiles/edit_cache.dir
-/home/iain/Dev/snippets/build/CMakeFiles/rebuild_cache.dir
-/home/iain/Dev/snippets/build/CMakeFiles/snippetmanager_autogen_timestamp_deps.dir
-/home/iain/Dev/snippets/build/CMakeFiles/snippetmanager_autogen.dir

@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/iain/Dev/snippets/build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
