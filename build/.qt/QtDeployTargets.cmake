@@ -1,2 +1,0 @@
-set(__QT_DEPLOY_TARGET_snippetmanager_FILE /home/iain/Dev/Snippets-Manager/build/snippetmanager)
-set(__QT_DEPLOY_TARGET_snippetmanager_TYPE EXECUTABLE)

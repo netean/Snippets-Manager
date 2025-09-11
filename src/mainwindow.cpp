@@ -141,11 +141,15 @@ void MainWindow::onSelectionChanged()
         m_contentEdit->setPlainText(snippet.content);
         m_isModified = false;
         
+        // Automatically copy content to clipboard when selecting a snippet
+        QClipboard *clipboard = QApplication::clipboard();
+        clipboard->setText(snippet.content);
+        
         // Make fields read-only by default, user clicks Edit to modify
         m_titleEdit->setEnabled(false);
         m_contentEdit->setEnabled(false);
-        m_modeLabel->setText("Viewing snippet - Click 'Edit' to modify");
-        statusBar()->showMessage("Viewing snippet - Click 'Edit' to modify");
+        m_modeLabel->setText("Viewing snippet - Content copied to clipboard");
+        statusBar()->showMessage("Content copied to clipboard - Click 'Edit' to modify", 3000);
     } else {
         m_currentSnippetId = -1;
         m_titleEdit->clear();

@@ -1,0 +1,58 @@
+# Build directories
+build/
+build-*/
+debug/
+release/
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Qt generated files
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.pro.user
+*.pro.user.*
+
+# Compiled binaries
+*.exe
+*.app
+snippetmanager
+SnippetManager
+
+# Object files
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+
+# Generated icon files (keep SVG source)
+resources/*.png
+resources/*.ico
+!resources/icon.svg
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database files (user data)
+*.db
+*.sqlite
+
+# Temporary files
+*.tmp
+*.temp
+*.log

@@ -1,9 +1,0 @@
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/snippetmanager.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/edit_cache.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/rebuild_cache.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/list_install_components.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/install.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/install/local.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/install/strip.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/snippetmanager_autogen_timestamp_deps.dir
-/home/iain/Dev/Snippets-Manager/build/CMakeFiles/snippetmanager_autogen.dir
