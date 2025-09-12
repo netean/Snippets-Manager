@@ -29,15 +29,15 @@ sudo apt install cmake build-essential qt6-base-dev qt6-sql-sqlite \
 ### Build Steps
 ```bash
 mkdir build
-cd build
-cmake ..
-make
-```
+cmake -S ./ -B ./build
+cd build && make
 
 ### Run
 ```bash
 ./snippetmanager
 ```
+
+Or just download the binary release from the releases page.
 
 ## Usage
 
