@@ -4,7 +4,7 @@
 
 A very simple, very basic, KDE desktop application for storing and managing text snippets, code snippets, and short phrases with full Unicode support.
 
-I couldn't find anything that suited my needs: just a dead simple, very basic string snippets tools. So I built one.. actually Claude Sonnet did most of the coding, I just "supervised"
+I couldn't find anything that suited my needs: just a dead simple, very basic snippets tools for storing string. So I built one.. actually Claude did most of the coding, I just "supervised". 
 
 
 
