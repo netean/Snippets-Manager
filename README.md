@@ -15,30 +15,41 @@ I couldn't find anything that suited my needs: just a dead simple, very basic st
 - **SQLite Backend**: Self-contained database storage
 - **Native KDE Integration**: Built with Qt and KDE Frameworks
 
-## Building
+## Installing (Linux)
+
+The easiest way is the install script, which builds the app and adds it to your application menu:
+
+```bash
+./install.sh --install-deps   # first time: also installs the build dependencies (apt, dnf, pacman or zypper)
+./install.sh                  # build and install for the current user (into ~/.local, no sudo)
+./install.sh --system         # or install for all users (into /usr/local, uses sudo)
+./install.sh --uninstall      # remove it again (add --system if you installed with it)
+```
+
+Run `./install.sh --help` for all options. Uninstalling never touches your snippets database.
+
+## Building manually
 
 ### Prerequisites
 
 - CMake 3.16+
-- Qt6 (Core, Widgets, Sql)
-- KDE Frameworks 6 (CoreAddons, I18n, XmlGui, ConfigWidgets)
+- Qt6 (Core, Widgets, Sql with the SQLite driver)
 - C++17 compiler
 
 ### Ubuntu/Debian
 ```bash
-sudo apt install cmake build-essential qt6-base-dev qt6-sql-sqlite \
-    libkf6coreaddons-dev libkf6i18n-dev libkf6xmlgui-dev libkf6configwidgets-dev
+sudo apt install cmake build-essential qt6-base-dev libqt6sql6-sqlite
 ```
 
 ### Build Steps
 ```bash
-mkdir build
 cmake -S ./ -B ./build
-cd build && make
+cmake --build ./build
+```
 
 ### Run
 ```bash
-./snippetmanager
+./build/snippetmanager
 ```
 
 Or just download the binary release from the releases page.
@@ -57,7 +68,7 @@ Or just download the binary release from the releases page.
 ## Data Storage
 
 By default, snippets are stored in a SQLite database located at:
-`~/.local/share/SnippetManager/snippets.db`
+`~/.local/share/SnippetManager/Snippet Manager/snippets.db`
 
 You can move it, or switch to another database file, from File > Settings.... The chosen location is remembered between runs.
 
