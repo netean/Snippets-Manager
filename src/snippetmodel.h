@@ -25,10 +25,15 @@ public:
 
     void refresh();
     void search(const QString &searchTerm);
+    void setSortOrder(Database::SortOrder order);
+    Database::SortOrder sortOrder() const;
     Snippet getSnippet(int row) const;
+    int rowForId(int id) const;
 
 private:
     QList<Snippet> m_snippets;
+    QString m_searchTerm;
+    Database::SortOrder m_sortOrder = Database::CreatedDescending;
 };
 
 #endif // SNIPPETMODEL_H

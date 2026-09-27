@@ -32,10 +32,14 @@ SnippetManager
 *.dylib
 *.dll
 
-# Generated icon files (keep SVG source)
+# Application icons (generated from resources/icon.svg, but committed so the
+# project builds without extra tools)
 resources/*.png
 resources/*.ico
-!resources/icon.svg
+!resources/icon.png
+!resources/icon-64.png
+!resources/icon-32.png
+!resources/icon.ico
 
 # IDE files
 .vscode/

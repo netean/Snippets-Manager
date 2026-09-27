@@ -34,6 +34,8 @@ set(snippetmanager_SRCS
     src/snippetmodel.h
     src/database.cpp
     src/database.h
+    src/settingsdialog.cpp
+    src/settingsdialog.h
     resources/resources.qrc
     ${snippetmanager_SRCS}
 )

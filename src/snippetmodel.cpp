@@ -50,19 +50,29 @@ QHash<int, QByteArray> SnippetModel::roleNames() const
 void SnippetModel::refresh()
 {
     beginResetModel();
-    m_snippets = Database::instance().getAllSnippets();
+    if (m_searchTerm.isEmpty()) {
+        m_snippets = Database::instance().getAllSnippets(m_sortOrder);
+    } else {
+        m_snippets = Database::instance().searchSnippets(m_searchTerm, m_sortOrder);
+    }
     endResetModel();
 }
 
 void SnippetModel::search(const QString &searchTerm)
 {
-    beginResetModel();
-    if (searchTerm.isEmpty()) {
-        m_snippets = Database::instance().getAllSnippets();
-    } else {
-        m_snippets = Database::instance().searchSnippets(searchTerm);
-    }
-    endResetModel();
+    m_searchTerm = searchTerm;
+    refresh();
+}
+
+void SnippetModel::setSortOrder(Database::SortOrder order)
+{
+    m_sortOrder = order;
+    refresh();
+}
+
+Database::SortOrder SnippetModel::sortOrder() const
+{
+    return m_sortOrder;
 }
 
 Snippet SnippetModel::getSnippet(int row) const
@@ -71,4 +81,14 @@ Snippet SnippetModel::getSnippet(int row) const
         return m_snippets.at(row);
     }
     return Snippet();
+}
+
+int SnippetModel::rowForId(int id) const
+{
+    for (int row = 0; row < m_snippets.size(); ++row) {
+        if (m_snippets.at(row).id == id) {
+            return row;
+        }
+    }
+    return -1;
 }
