@@ -61,7 +61,11 @@ MainWindow::MainWindow(QWidget *parent)
     
     loadSnippet(-1);
     
-    setWindowTitle("Snippet Manager - Text & Code Snippets");
+    setWindowTitle(QString("Snippet Manager %1 - Text & Code Snippets").arg(QApplication::applicationVersion()));
+
+    QLabel *versionLabel = new QLabel("v" + QApplication::applicationVersion());
+    versionLabel->setStyleSheet("color: #666; padding: 0 4px;");
+    statusBar()->addPermanentWidget(versionLabel);
     
     // The application icon is set in main.cpp, but we can override for this window if needed
     QIcon windowIcon = QApplication::windowIcon();
@@ -171,6 +175,22 @@ void MainWindow::setupMenus()
     QAction *quitAction = fileMenu->addAction("&Quit");
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+
+    QMenu *helpMenu = menuBar()->addMenu("&Help");
+    QAction *aboutAction = helpMenu->addAction("&About Snippet Manager");
+    connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);
+}
+
+void MainWindow::onAbout()
+{
+    QMessageBox::about(this, "About Snippet Manager",
+                       QString("<h3>Snippet Manager %1</h3>"
+                               "<p>A simple manager for text and code snippets.</p>"
+                               "<p>Built with Qt %2</p>"
+                               "<p>Database: %3</p>")
+                           .arg(QApplication::applicationVersion(),
+                                QT_VERSION_STR,
+                                QDir::toNativeSeparators(Database::instance().databasePath()).toHtmlEscaped()));
 }
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)

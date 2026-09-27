@@ -38,8 +38,9 @@ fi
 [[ -n "${QMAKE:-}" ]] || die "Couldn't find qmake for Qt 6. Install the Qt 6 development tools (e.g. qt6-base-dev-tools) or set QMAKE."
 export QMAKE
 
-VERSION="$(sed -n 's/.*MACOSX_BUNDLE_SHORT_VERSION_STRING "\(.*\)".*/\1/p' "$SOURCE_DIR/CMakeLists.txt")"
-VERSION="${VERSION:-dev}"
+# The version comes from project(... VERSION x.y) in CMakeLists.txt
+VERSION="$(sed -n 's/^project(.*VERSION \([0-9][0-9.]*\).*/\1/p' "$SOURCE_DIR/CMakeLists.txt")"
+[[ -n "$VERSION" ]] || die "Couldn't read the version from CMakeLists.txt"
 OUTPUT="$SOURCE_DIR/SnippetManager-$VERSION-$ARCH.AppImage"
 
 # ---------------------------------------------------------------------------
@@ -88,7 +89,8 @@ info "Bundling Qt and creating the AppImage"
 rm -f "$SOURCE_DIR"/SnippetManager-*-"$ARCH".AppImage
 (
     cd "$BUILD_DIR"
-    LDAI_OUTPUT="$OUTPUT" "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" \
+    # LINUXDEPLOY_OUTPUT_VERSION is embedded in the AppImage's desktop file (X-AppImage-Version)
+    LDAI_OUTPUT="$OUTPUT" LINUXDEPLOY_OUTPUT_VERSION="$VERSION" "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" \
         --appdir "$APPDIR" \
         --desktop-file "$APPDIR/usr/share/applications/snippetmanager.desktop" \
         --icon-file "$SOURCE_DIR/resources/icon.png" \
@@ -101,5 +103,5 @@ rm -f "$SOURCE_DIR"/SnippetManager-*-"$ARCH".AppImage
 [[ -n "$(find "$APPDIR" -path '*sqldrivers*' -name 'libqsqlite*')" ]] \
     || die "The Qt SQLite driver wasn't bundled; the app wouldn't be able to open its database."
 
-info "Created $(basename "$OUTPUT") ($(du -h "$OUTPUT" | cut -f1))"
+info "Created Snippet Manager $VERSION: $(basename "$OUTPUT") ($(du -h "$OUTPUT" | cut -f1))"
 echo "    Run it with: chmod +x $(basename "$OUTPUT") && ./$(basename "$OUTPUT")"

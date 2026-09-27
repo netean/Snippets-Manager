@@ -38,6 +38,7 @@ private slots:
     void onContentChanged();
     void onShowSettings();
     void onDatabaseChanged();
+    void onAbout();
 
 private:
     void setupUI();

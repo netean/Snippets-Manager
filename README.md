@@ -1,5 +1,7 @@
 # Snippet Manager
 
+**Current version: 1.2** — see [CHANGELOG.md](CHANGELOG.md) for what's new.
+
 A very simple, very basic, KDE desktop application for storing and managing text snippets, code snippets, and short phrases with full Unicode support.
 
 I couldn't find anything that suited my needs: just a dead simple, very basic string snippets tools. So I built one.. actually Claude Sonnet did most of the coding, I just "supervised"
@@ -34,8 +36,8 @@ Run `./install.sh --help` for all options. Uninstalling never touches your snipp
 
 ```bash
 ./package-appimage.sh
-chmod +x SnippetManager-1.0-x86_64.AppImage
-./SnippetManager-1.0-x86_64.AppImage
+chmod +x SnippetManager-1.2-x86_64.AppImage
+./SnippetManager-1.2-x86_64.AppImage
 ```
 
 The AppImage needs a glibc at least as new as the machine that built it, so build it on the oldest distro you want to support. Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the distro); without it, run it with `--appimage-extract-and-run`.
@@ -95,4 +97,6 @@ The application itself is completely self-contained and portable (exluding the d
 <img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/cd1bb4b1-20dc-45ce-a06e-62f6ccc0c3dc" />
 <img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/d165547e-aad1-4add-91f3-fe5180ad5d4c" />
 
+## Version
 
+The version number is set in one place, the `project(SnippetManager VERSION 1.2 ...)` line in `CMakeLists.txt`. The app (window title, status bar, Help > About and `snippetmanager --version`), the Windows and macOS metadata, `install.sh` and the AppImage file name all pick it up from there. To release a new version, change that line, add an entry to `CHANGELOG.md`, and rebuild.
