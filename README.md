@@ -88,8 +88,6 @@ You can move it, or switch to another database file, from File > Settings.... Th
 
 Change the location in the settings
 
-The application itself is completely self-contained and portable (exluding the database)
-
 
 ## Screenshots
 
@@ -97,6 +95,4 @@ The application itself is completely self-contained and portable (exluding the d
 <img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/cd1bb4b1-20dc-45ce-a06e-62f6ccc0c3dc" />
 <img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/d165547e-aad1-4add-91f3-fe5180ad5d4c" />
 
-## Version
 
-The version number is set in one place, the `project(SnippetManager VERSION 1.2 ...)` line in `CMakeLists.txt`. The app (window title, status bar, Help > About and `snippetmanager --version`), the Windows and macOS metadata, `install.sh` and the AppImage file name all pick it up from there. To release a new version, change that line, add an entry to `CHANGELOG.md`, and rebuild.
