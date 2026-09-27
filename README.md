@@ -53,7 +53,18 @@ Or just download the binary release from the releases page.
 
 ## Data Storage
 
-Snippets are stored in a SQLite database located at:
+By default, Snippets are stored in a SQLite database located at:
 `~/.local/share/SnippetManager/snippets.db`
 
-The application is completely self-contained and portable.
+Change the location in the settings
+
+The application itself is completely self-contained and portable (exluding the database)
+
+
+## Screenshots
+
+<img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/4b06dcdc-bbd8-41fc-a6dc-19217ebd7ccd" />
+<img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/cd1bb4b1-20dc-45ce-a06e-62f6ccc0c3dc" />
+<img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/d165547e-aad1-4add-91f3-fe5180ad5d4c" />
+
+
