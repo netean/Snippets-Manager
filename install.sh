@@ -7,9 +7,11 @@
 
 set -euo pipefail
 
-APP_NAME="Snippet Manager"
 BINARY="snippetmanager"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The version comes from project(... VERSION x.y) in CMakeLists.txt
+VERSION="$(sed -n 's/^project(.*VERSION \([0-9][0-9.]*\).*/\1/p' "$SOURCE_DIR/CMakeLists.txt")"
+APP_NAME="Snippet Manager${VERSION:+ $VERSION}"
 BUILD_DIR="$SOURCE_DIR/build-release"
 
 PREFIX="$HOME/.local"

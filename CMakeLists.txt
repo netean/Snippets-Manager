@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
-project(SnippetManager)
+# The application version. This is the only place it's set: the app, the
+# Windows and macOS metadata and the AppImage file name all read it from here.
+project(SnippetManager VERSION 1.2 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,11 +13,10 @@ set(CMAKE_AUTORCC ON)
 
 # Platform-specific icon handling
 if(WIN32)
-    # Windows icon resource
-    set(ICON_RC "${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.rc")
-    if(EXISTS ${ICON_RC})
-        list(APPEND snippetmanager_SRCS ${ICON_RC})
-    endif()
+    # Windows icon and version resource
+    set(ICON_RC "${CMAKE_CURRENT_BINARY_DIR}/icon.rc")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/resources/icon.rc.in" "${ICON_RC}" @ONLY)
+    list(APPEND snippetmanager_SRCS ${ICON_RC})
 elseif(APPLE)
     # macOS icon
     set(MACOSX_BUNDLE_ICON_FILE icon.png)
@@ -47,13 +48,15 @@ if(APPLE)
         MACOSX_BUNDLE_BUNDLE_NAME "Snippet Manager"
         MACOSX_BUNDLE_DISPLAY_NAME "Snippet Manager"
         MACOSX_BUNDLE_INFO_STRING "Text and Code Snippet Manager"
-        MACOSX_BUNDLE_LONG_VERSION_STRING "1.0.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
     )
 else()
     add_executable(snippetmanager ${snippetmanager_SRCS})
 endif()
+
+target_compile_definitions(snippetmanager PRIVATE APP_VERSION="${PROJECT_VERSION}")
 
 target_link_libraries(snippetmanager
     Qt6::Core

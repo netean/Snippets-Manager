@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QCommandLineParser>
 #include <QDir>
 #include <QStandardPaths>
 #include <QIcon>
@@ -11,8 +12,15 @@ int main(int argc, char *argv[])
     QApplication app(argc, argv);
     
     app.setApplicationName("Snippet Manager");
-    app.setApplicationVersion("1.0");
+    app.setApplicationVersion(APP_VERSION);
     app.setOrganizationName("SnippetManager");
+
+    // Supports --version and --help
+    QCommandLineParser parser;
+    parser.setApplicationDescription("Text and code snippet manager");
+    parser.addHelpOption();
+    parser.addVersionOption();
+    parser.process(app);
     
     // Set application icon with multiple fallbacks
     QIcon appIcon;
