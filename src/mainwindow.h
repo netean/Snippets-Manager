@@ -6,6 +6,7 @@
 #include <QTextEdit>
 #include <QLineEdit>
 #include <QPushButton>
+#include <QComboBox>
 #include <QSplitter>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -21,9 +22,13 @@ public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
 
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
 private slots:
-    void onSelectionChanged();
+    void onSelectionChanged(const QModelIndex &current);
     void onSearchTextChanged();
+    void onSortOrderChanged();
     void onAddSnippet();
     void onEditSnippet();
     void onSaveSnippet();
@@ -31,11 +36,18 @@ private slots:
     void onCopySnippet();
     void onTitleChanged();
     void onContentChanged();
+    void onShowSettings();
+    void onDatabaseChanged();
 
 private:
     void setupUI();
+    void setupMenus();
     void updateButtonStates();
     void saveCurrentSnippet();
+    void loadSnippet(int id);
+    void selectSnippet(int id);
+    void setContentEditable(bool editable);
+    bool isContentEditable() const;
     
     QWidget *m_centralWidget;
     QSplitter *m_splitter;
@@ -43,6 +55,7 @@ private:
     // Left panel
     QWidget *m_leftPanel;
     QLineEdit *m_searchEdit;
+    QComboBox *m_sortCombo;
     QListView *m_snippetList;
     QPushButton *m_addButton;
     QPushButton *m_editButton;
@@ -59,6 +72,7 @@ private:
     SnippetModel *m_model;
     int m_currentSnippetId;
     bool m_isModified;
+    bool m_updatingSelection;
     QTimer *m_searchTimer;
 };
 

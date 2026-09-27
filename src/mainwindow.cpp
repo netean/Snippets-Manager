@@ -1,25 +1,41 @@
 #include "mainwindow.h"
 #include "database.h"
+#include "settingsdialog.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QStatusBar>
+#include <QMenuBar>
+#include <QMenu>
+#include <QAction>
+#include <QMouseEvent>
+#include <QSettings>
 #include <QIcon>
 #include <QDebug>
 #include <QDir>
 #include <QCoreApplication>
 #include <QFile>
 
+static const char *SortOrderKey = "view/sortOrder";
+
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
     , m_currentSnippetId(-1)
     , m_isModified(false)
+    , m_updatingSelection(false)
 {
     setupUI();
+    setupMenus();
     
     m_model = new SnippetModel(this);
     m_snippetList->setModel(m_model);
+
+    // Restore the last used sort order
+    int savedOrder = QSettings().value(SortOrderKey, Database::CreatedDescending).toInt();
+    int comboIndex = m_sortCombo->findData(savedOrder);
+    m_sortCombo->setCurrentIndex(comboIndex >= 0 ? comboIndex : 0);
+    m_model->setSortOrder(static_cast<Database::SortOrder>(m_sortCombo->currentData().toInt()));
     
     m_searchTimer = new QTimer(this);
     m_searchTimer->setSingleShot(true);
@@ -30,15 +46,20 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_snippetList->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &MainWindow::onSelectionChanged);
     connect(m_searchEdit, &QLineEdit::textChanged, [this]() { m_searchTimer->start(); });
+    connect(m_sortCombo, &QComboBox::currentIndexChanged, this, &MainWindow::onSortOrderChanged);
     connect(m_addButton, &QPushButton::clicked, this, &MainWindow::onAddSnippet);
     connect(m_editButton, &QPushButton::clicked, this, &MainWindow::onEditSnippet);
     connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::onDeleteSnippet);
     connect(m_saveButton, &QPushButton::clicked, this, &MainWindow::onSaveSnippet);
     connect(m_copyButton, &QPushButton::clicked, this, &MainWindow::onCopySnippet);
     connect(m_titleEdit, &QLineEdit::textChanged, this, &MainWindow::onTitleChanged);
+    connect(m_titleEdit, &QLineEdit::returnPressed, this, &MainWindow::saveCurrentSnippet);
     connect(m_contentEdit, &QTextEdit::textChanged, this, &MainWindow::onContentChanged);
+
+    // Clicking in the content area copies it to the clipboard
+    m_contentEdit->viewport()->installEventFilter(this);
     
-    updateButtonStates();
+    loadSnippet(-1);
     
     setWindowTitle("Snippet Manager - Text & Code Snippets");
     
@@ -60,9 +81,6 @@ MainWindow::MainWindow(QWidget *parent)
     }
     
     resize(800, 600);
-    
-    // Add status bar
-    statusBar()->showMessage("Select a snippet to edit, or click 'Add' to create a new one");
 }
 
 MainWindow::~MainWindow()
@@ -84,6 +102,16 @@ void MainWindow::setupUI()
     m_searchEdit = new QLineEdit;
     m_searchEdit->setPlaceholderText("Search snippets...");
     leftLayout->addWidget(m_searchEdit);
+
+    QHBoxLayout *sortLayout = new QHBoxLayout;
+    sortLayout->addWidget(new QLabel("Sort:"));
+    m_sortCombo = new QComboBox;
+    m_sortCombo->addItem("Title (A-Z)", Database::TitleAscending);
+    m_sortCombo->addItem("Title (Z-A)", Database::TitleDescending);
+    m_sortCombo->addItem("Oldest first", Database::CreatedAscending);
+    m_sortCombo->addItem("Newest first", Database::CreatedDescending);
+    sortLayout->addWidget(m_sortCombo, 1);
+    leftLayout->addLayout(sortLayout);
     
     m_snippetList = new QListView;
     leftLayout->addWidget(m_snippetList);
@@ -111,6 +139,7 @@ void MainWindow::setupUI()
     
     rightLayout->addWidget(new QLabel("Content:"));
     m_contentEdit = new QTextEdit;
+    m_contentEdit->setAcceptRichText(false);
     rightLayout->addWidget(m_contentEdit);
     
     QHBoxLayout *rightButtonLayout = new QHBoxLayout;
@@ -129,73 +158,166 @@ void MainWindow::setupUI()
     mainLayout->addWidget(m_splitter);
 }
 
-void MainWindow::onSelectionChanged()
+void MainWindow::setupMenus()
 {
-    saveCurrentSnippet();
-    
-    QModelIndex current = m_snippetList->currentIndex();
-    if (current.isValid()) {
-        Snippet snippet = m_model->getSnippet(current.row());
-        m_currentSnippetId = snippet.id;
-        m_titleEdit->setText(snippet.title);
-        m_contentEdit->setPlainText(snippet.content);
-        m_isModified = false;
-        
-        // Automatically copy content to clipboard when selecting a snippet
-        QClipboard *clipboard = QApplication::clipboard();
-        clipboard->setText(snippet.content);
-        
-        // Make fields read-only by default, user clicks Edit to modify
-        m_titleEdit->setEnabled(false);
-        m_contentEdit->setEnabled(false);
-        m_modeLabel->setText("Viewing snippet - Content copied to clipboard");
-        statusBar()->showMessage("Content copied to clipboard - Click 'Edit' to modify", 3000);
-    } else {
-        m_currentSnippetId = -1;
-        m_titleEdit->clear();
-        m_contentEdit->clear();
-        m_isModified = false;
-        m_titleEdit->setEnabled(false);
-        m_contentEdit->setEnabled(false);
+    QMenu *fileMenu = menuBar()->addMenu("&File");
+
+    QAction *settingsAction = fileMenu->addAction("&Settings...");
+    settingsAction->setShortcut(QKeySequence::Preferences);
+    connect(settingsAction, &QAction::triggered, this, &MainWindow::onShowSettings);
+
+    fileMenu->addSeparator();
+
+    QAction *quitAction = fileMenu->addAction("&Quit");
+    quitAction->setShortcut(QKeySequence::Quit);
+    connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+}
+
+bool MainWindow::eventFilter(QObject *watched, QEvent *event)
+{
+    // While viewing (not editing) a snippet, a click anywhere in the content
+    // copies it. If the user dragged to select part of the text, only the
+    // selection is copied. Clicks while editing are left alone so the
+    // clipboard isn't overwritten before the user can paste into the snippet.
+    if (watched == m_contentEdit->viewport() && event->type() == QEvent::MouseButtonRelease) {
+        QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
+        if (mouseEvent->button() == Qt::LeftButton && m_currentSnippetId != -1 && !isContentEditable()) {
+            QString selected = m_contentEdit->textCursor().selectedText();
+            if (!selected.isEmpty()) {
+                // QTextCursor uses the Unicode paragraph separator for line breaks
+                selected.replace(QChar::ParagraphSeparator, '\n');
+                QApplication::clipboard()->setText(selected);
+                statusBar()->showMessage("Selected text copied to clipboard", 2000);
+            } else if (!m_contentEdit->toPlainText().isEmpty()) {
+                QApplication::clipboard()->setText(m_contentEdit->toPlainText());
+                statusBar()->showMessage("Content copied to clipboard", 2000);
+            }
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::setContentEditable(bool editable)
+{
+    m_contentEdit->setReadOnly(!editable);
+    // Keep the text cursor visible and selectable in view mode too
+    m_contentEdit->setTextInteractionFlags(editable ? Qt::TextEditorInteraction
+                                                    : Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    m_contentEdit->viewport()->setCursor(editable ? Qt::IBeamCursor : Qt::PointingHandCursor);
+
+    if (m_currentSnippetId == -1) {
         m_modeLabel->setText("Select a snippet to view");
+    } else if (editable) {
+        m_modeLabel->setText("Editing snippet - Make changes and click 'Save'");
+    } else {
+        m_modeLabel->setText("Viewing snippet - Click the content to copy it");
+    }
+}
+
+bool MainWindow::isContentEditable() const
+{
+    return !m_contentEdit->isReadOnly();
+}
+
+void MainWindow::loadSnippet(int id)
+{
+    Snippet snippet = id != -1 ? Database::instance().getSnippet(id) : Snippet();
+    m_currentSnippetId = snippet.id;
+
+    m_titleEdit->setText(snippet.title);
+    m_contentEdit->setPlainText(snippet.content);
+    m_isModified = false;
+
+    bool hasSnippet = m_currentSnippetId != -1;
+    m_titleEdit->setEnabled(hasSnippet);
+    m_contentEdit->setEnabled(hasSnippet);
+    setContentEditable(false);
+    updateButtonStates();
+}
+
+void MainWindow::selectSnippet(int id)
+{
+    m_updatingSelection = true;
+    int row = m_model->rowForId(id);
+    if (row >= 0) {
+        QModelIndex index = m_model->index(row, 0);
+        m_snippetList->setCurrentIndex(index);
+        m_snippetList->scrollTo(index);
+    } else {
+        m_snippetList->setCurrentIndex(QModelIndex());
+    }
+    m_updatingSelection = false;
+}
+
+void MainWindow::onSelectionChanged(const QModelIndex &current)
+{
+    if (m_updatingSelection) return;
+
+    int newId = current.isValid() ? m_model->data(current, SnippetModel::IdRole).toInt() : -1;
+
+    // Saving refreshes the model, which would lose the new selection, so restore it afterwards
+    saveCurrentSnippet();
+    selectSnippet(newId);
+    loadSnippet(newId);
+
+    if (m_currentSnippetId != -1) {
+        // Automatically copy content to clipboard when selecting a snippet
+        QApplication::clipboard()->setText(m_contentEdit->toPlainText());
+        statusBar()->showMessage("Content copied to clipboard - Rename using the title field, click 'Edit' to change the content", 4000);
+    } else {
         statusBar()->showMessage("Select a snippet to view, or click 'Add' to create a new one");
     }
-    
-    updateButtonStates();
 }
 
 void MainWindow::onSearchTextChanged()
 {
     saveCurrentSnippet();
     m_model->search(m_searchEdit->text());
+    selectSnippet(m_currentSnippetId);
+}
+
+void MainWindow::onSortOrderChanged()
+{
+    auto order = static_cast<Database::SortOrder>(m_sortCombo->currentData().toInt());
+    QSettings().setValue(SortOrderKey, static_cast<int>(order));
+
+    saveCurrentSnippet();
+    m_model->setSortOrder(order);
+    selectSnippet(m_currentSnippetId);
 }
 
 void MainWindow::onAddSnippet()
 {
     saveCurrentSnippet();
-    
-    QString title = "New Snippet";
-    QString content = "";
-    
-    if (Database::instance().addSnippet(title, content)) {
-        m_model->refresh();
-        
-        // Select the new snippet (it should be at the top)
-        QModelIndex firstIndex = m_model->index(0, 0);
-        m_snippetList->setCurrentIndex(firstIndex);
-        m_titleEdit->selectAll();
-        m_titleEdit->setFocus();
-        m_titleEdit->setEnabled(true);
-        m_contentEdit->setEnabled(true);
+
+    // Clear any search so the new snippet is visible in the list
+    if (!m_searchEdit->text().isEmpty()) {
+        m_searchTimer->stop();
+        m_searchEdit->blockSignals(true);
+        m_searchEdit->clear();
+        m_searchEdit->blockSignals(false);
+        m_model->search(QString());
     }
+    
+    int id = Database::instance().addSnippet("New Snippet", "");
+    if (id == -1) {
+        QMessageBox::warning(this, "Add Snippet", "The snippet could not be added.");
+        return;
+    }
+
+    m_model->refresh();
+    selectSnippet(id);
+    loadSnippet(id);
+    setContentEditable(true);
+    updateButtonStates();
+    m_titleEdit->selectAll();
+    m_titleEdit->setFocus();
 }
 
 void MainWindow::onEditSnippet()
 {
-    m_titleEdit->setEnabled(true);
-    m_contentEdit->setEnabled(true);
-    m_titleEdit->setFocus();
-    m_modeLabel->setText("Editing snippet - Make changes and click 'Save'");
+    setContentEditable(true);
+    m_contentEdit->setFocus();
     statusBar()->showMessage("Editing snippet - Make changes and click 'Save'");
     updateButtonStates();
 }
@@ -203,27 +325,25 @@ void MainWindow::onEditSnippet()
 void MainWindow::onSaveSnippet()
 {
     saveCurrentSnippet();
+    setContentEditable(false);
+    updateButtonStates();
 }
 
 void MainWindow::onDeleteSnippet()
 {
-    QModelIndex current = m_snippetList->currentIndex();
-    if (!current.isValid()) return;
-    
-    Snippet snippet = m_model->getSnippet(current.row());
-    
+    if (m_currentSnippetId == -1) return;
+
+    QString title = m_titleEdit->text().trimmed();
     int ret = QMessageBox::question(this, "Delete Snippet",
-                                   QString("Are you sure you want to delete '%1'?").arg(snippet.title),
+                                   QString("Are you sure you want to delete '%1'?").arg(title),
                                    QMessageBox::Yes | QMessageBox::No);
     
     if (ret == QMessageBox::Yes) {
-        if (Database::instance().deleteSnippet(snippet.id)) {
-            m_model->refresh();
-            m_currentSnippetId = -1;
-            m_titleEdit->clear();
-            m_contentEdit->clear();
+        if (Database::instance().deleteSnippet(m_currentSnippetId)) {
             m_isModified = false;
-            updateButtonStates();
+            m_model->refresh();
+            selectSnippet(-1);
+            loadSnippet(-1);
         }
     }
 }
@@ -232,6 +352,7 @@ void MainWindow::onCopySnippet()
 {
     QClipboard *clipboard = QApplication::clipboard();
     clipboard->setText(m_contentEdit->toPlainText());
+    statusBar()->showMessage("Content copied to clipboard", 2000);
 }
 
 void MainWindow::onTitleChanged()
@@ -246,15 +367,31 @@ void MainWindow::onContentChanged()
     updateButtonStates();
 }
 
+void MainWindow::onShowSettings()
+{
+    SettingsDialog dialog(this);
+    connect(&dialog, &SettingsDialog::aboutToChangeDatabase, this, &MainWindow::saveCurrentSnippet);
+    connect(&dialog, &SettingsDialog::databaseChanged, this, &MainWindow::onDatabaseChanged);
+    dialog.exec();
+}
+
+void MainWindow::onDatabaseChanged()
+{
+    m_isModified = false;
+    m_model->refresh();
+    selectSnippet(-1);
+    loadSnippet(-1);
+    statusBar()->showMessage("Using database " + QDir::toNativeSeparators(Database::instance().databasePath()), 5000);
+}
+
 void MainWindow::updateButtonStates()
 {
     bool hasSelection = m_currentSnippetId != -1;
     bool hasContent = !m_contentEdit->toPlainText().isEmpty();
-    bool isEditing = m_titleEdit->isEnabled();
     
-    m_editButton->setEnabled(hasSelection && !isEditing);
+    m_editButton->setEnabled(hasSelection && !isContentEditable());
     m_deleteButton->setEnabled(hasSelection);
-    m_saveButton->setEnabled(m_isModified && hasSelection && isEditing);
+    m_saveButton->setEnabled(m_isModified && hasSelection);
     m_copyButton->setEnabled(hasContent);
 }
 
@@ -271,6 +408,7 @@ void MainWindow::saveCurrentSnippet()
         if (Database::instance().updateSnippet(m_currentSnippetId, title, content)) {
             m_isModified = false;
             m_model->refresh();
+            selectSnippet(m_currentSnippetId);
             updateButtonStates();
             statusBar()->showMessage("Snippet saved successfully", 2000);
         }
