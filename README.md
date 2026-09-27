@@ -28,6 +28,18 @@ The easiest way is the install script, which builds the app and adds it to your 
 
 Run `./install.sh --help` for all options. Uninstalling never touches your snippets database.
 
+## Ready-to-run AppImage
+
+`package-appimage.sh` builds a single self-contained file, with Qt bundled, that runs on other Linux machines without installing anything:
+
+```bash
+./package-appimage.sh
+chmod +x SnippetManager-1.0-x86_64.AppImage
+./SnippetManager-1.0-x86_64.AppImage
+```
+
+The AppImage needs a glibc at least as new as the machine that built it, so build it on the oldest distro you want to support. Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the distro); without it, run it with `--appimage-extract-and-run`.
+
 ## Building manually
 
 ### Prerequisites

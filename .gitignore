@@ -60,3 +60,5 @@ Thumbs.db
 *.tmp
 *.temp
 *.log
+# Packaged AppImages (built by package-appimage.sh)
+*.AppImage
