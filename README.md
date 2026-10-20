@@ -8,6 +8,11 @@ I couldn't find anything that suited my needs: just a dead simple, very basic sn
 
 It's about 1000 lines of C++ and runs as a native QT application (supports themes)
 
+Download and use the install script to compile it yourself, or use the AppImage binary release
+
+Used and tested on Fedora and CachyOs
+
+
 
 
 ## Features
