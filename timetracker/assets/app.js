@@ -75,6 +75,11 @@ function el(tag, attrs, ...kids) {
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+// Like replaceChildren, but skips null/false and flattens arrays (for conditional content).
+function fill(node, ...kids) {
+    node.replaceChildren(...kids.flat(Infinity).filter((k) => k != null && k !== false));
+}
+
 function setView(node) {
     const v = $('#view');
     v.replaceChildren(node);
@@ -137,6 +142,9 @@ function fmtRange(from, to) {
     return f.toLocaleDateString(undefined, o) + ' – ' + t.toLocaleDateString(undefined, { ...o, year: 'numeric' });
 }
 
+const fmtQty = (q, unit) => unit === 'days'
+    ? (q === 0.5 ? '½ day' : `${+q.toFixed(2)} ${q === 1 ? 'day' : 'days'}`)
+    : `${(+q).toFixed(2)}${unit ? ' ' + unit : ''}`;
 const fmtDur = (min) => `${Math.floor(min / 60)}:${pad(Math.round(min % 60))}`;
 const fmtHrs = (min) => (min / 60).toFixed(2);
 
@@ -258,7 +266,7 @@ function projectSelect(selected, { blank = 'Choose project…', allowNew = true,
 }
 
 function fillTaskSelect(sel, projectId, selected) {
-    sel.replaceChildren(el('option', { value: '' }, projectId ? 'No task' : 'Task'));
+    fill(sel, el('option', { value: '' }, projectId ? 'No task' : 'Task'));
     if (projectId) {
         for (const t of tasksFor(projectId)) {
             if (t.archived && t.id !== +selected) continue;
@@ -291,7 +299,7 @@ function categoryPicker(selectedIds = [], onchange) {
     const panel = el('div', { class: 'cat-panel', hidden: true });
     const renderBtn = () => {
         const chosen = S.categories.filter((c) => selected.has(c.id));
-        btn.replaceChildren(...(chosen.length ? chosen.map(catChip) : [el('span', { class: 'muted' }, '🏷 Categories')]));
+        fill(btn, ...(chosen.length ? chosen.map(catChip) : [el('span', { class: 'muted' }, '🏷 Categories')]));
     };
     const renderPanel = () => {
         const newInput = el('input', { type: 'text', placeholder: 'New category…', onkeydown: (ev) => {
@@ -305,7 +313,7 @@ function categoryPicker(selectedIds = [], onchange) {
             selected.add(r.id);
             renderPanel(); renderBtn(); onchange && onchange([...selected]);
         });
-        panel.replaceChildren(
+        fill(panel, 
             ...S.categories.filter((c) => !c.archived || selected.has(c.id)).map((c) => el('label', { class: 'check' },
                 el('input', { type: 'checkbox', checked: selected.has(c.id), onchange: (ev) => {
                     ev.target.checked ? selected.add(c.id) : selected.delete(c.id);
@@ -673,7 +681,7 @@ async function loadTrackList(host) {
     if (!entries.length) {
         groups.push(el('p', { class: 'empty muted' }, v.q ? 'Nothing matches your search this week.' : 'No time logged this week yet.'));
     }
-    host.replaceChildren(nav, bulkBar, ...groups);
+    fill(host, nav, bulkBar, ...groups);
 }
 
 function entryRow(e, reload) {
@@ -692,7 +700,8 @@ function entryRow(e, reload) {
             el('div', { class: 'meta' }, projectChip(e.project_id), e.task_name && e.description ? el('span', { class: 'task' }, e.task_name) : null,
                 e.category_ids.map((id) => byId(S.categories, id)).filter(Boolean).map(catChip))),
         el('span', { class: 'flags' },
-            el('span', { class: 'billable' + (e.billable ? ' on' : ''), title: e.billable ? 'Billable at ' + money(e.eff_rate) + '/h' : 'Not billable' }, S.settings.currency_symbol || '$'),
+            el('span', { class: 'billable' + (e.billable ? ' on' : ''), title: !e.billable ? 'Not billable' : e.billing_unit === 'hour' ? `Billable at ${money(e.eff_rate)}/h`
+                : `Billed by the ${e.billing_unit === 'day' ? 'day' : 'half day'} at ${money(e.eff_rate)}/day — this date counts as ${fmtQty(e.bill_units, 'days')}` }, S.settings.currency_symbol || '$'),
             locked ? el('span', { class: 'lock', title: 'On invoice ' + e.invoice_number }, '🔒') : null),
         el('span', { class: 'times muted' }, e.start_time ? `${e.start_time}–${e.end_time}` : ''),
         el('span', { class: 'dur' }, fmtDur(e.minutes)),
@@ -866,7 +875,7 @@ function bulkEditModal(ids, onSaved) {
     const projSel = projectSelect(null, { blank: '— keep project —', allowNew: false, onchange: (id) => fillTask(id) });
     const taskSel = el('select');
     const fillTask = (pid) => {
-        taskSel.replaceChildren(el('option', { value: 'keep' }, '— keep task —'), el('option', { value: '' }, 'No task'));
+        fill(taskSel, el('option', { value: 'keep' }, '— keep task —'), el('option', { value: '' }, 'No task'));
         const list = pid ? tasksFor(pid) : S.tasks.filter((t) => t.project_id === null);
         list.filter((t) => !t.archived).forEach((t) => taskSel.append(el('option', { value: t.id }, t.name)));
         taskSel.value = 'keep';
@@ -992,7 +1001,7 @@ async function renderTimesheet(host) {
     const isThisWeek = v.weekStart === weekStart(today());
     const go = (ws) => { v.weekStart = ws; v.extraRows = []; renderTimesheet(host); };
 
-    host.replaceChildren(
+    fill(host, 
         el('div', { class: 'toolbar' },
             el('div', { class: 'week-nav' },
                 el('button', { class: 'btn ghost icon', onclick: () => go(addDays(v.weekStart, -7)) }, '‹'),
@@ -1094,7 +1103,7 @@ async function renderReports(host) {
     };
     const days = s.days.map((d) => ({ ...d, label: dayName(d.key) + ' ' + fmtDate(d.key) }));
 
-    host.replaceChildren(
+    fill(host, 
         el('div', { class: 'toolbar filters' }, periodControls(r, rerender),
             clientSelect(r.client_id, 'All clients', (v) => { r.client_id = v; r.project_id = ''; rerender(); }),
             projSel,
@@ -1181,7 +1190,7 @@ async function renderInvoices(host) {
 
     const extraBox = el('div', { class: 'extra-lines' });
     const renderExtra = () => {
-        extraBox.replaceChildren(...v.extra.map((l, i) => el('div', { class: 'extra-line' },
+        fill(extraBox, ...v.extra.map((l, i) => el('div', { class: 'extra-line' },
             el('input', { type: 'text', placeholder: 'Description (e.g. travel expenses)', value: l.description, oninput: (ev) => { l.description = ev.target.value; refreshPreview(); } }),
             el('input', { type: 'number', step: '0.01', class: 'qty', placeholder: 'Qty', value: l.quantity, oninput: (ev) => { l.quantity = ev.target.value; refreshPreview(); } }),
             el('input', { type: 'number', step: '0.01', class: 'price', placeholder: 'Price', value: l.unit_price, oninput: (ev) => { l.unit_price = ev.target.value; refreshPreview(); } }),
@@ -1202,7 +1211,7 @@ async function renderInvoices(host) {
     };
     const outstanding = invoices.filter((i) => i.status !== 'paid').reduce((a, i) => a + +i.total, 0);
 
-    host.replaceChildren(
+    fill(host, 
         el('section', { class: 'card' },
             el('h2', {}, 'New invoice'),
             el('div', { class: 'form-grid' },
@@ -1251,14 +1260,14 @@ async function renderInvoices(host) {
 
 function renderPreview(box, p) {
     if (!p.lines.length && !p.subtotal) {
-        box.replaceChildren(el('p', { class: 'muted empty' }, 'No un-invoiced billable time for this client and period.'));
+        fill(box, el('p', { class: 'muted empty' }, 'No un-invoiced billable time for this client and period.'));
         return;
     }
-    box.replaceChildren(...[
+    fill(box, ...[
         el('h3', {}, `Preview — ${p.entry_count} time entries`),
         el('table', { class: 'list' },
-            el('thead', {}, el('tr', {}, el('th', {}, 'Description'), el('th', { class: 'num' }, 'Hours'), el('th', { class: 'num' }, 'Rate'), el('th', { class: 'num' }, 'Amount'))),
-            el('tbody', {}, p.lines.map((l) => el('tr', {}, el('td', {}, l.description), el('td', { class: 'num' }, l.quantity.toFixed(2)),
+            el('thead', {}, el('tr', {}, el('th', {}, 'Description'), el('th', { class: 'num' }, 'Qty'), el('th', { class: 'num' }, 'Rate'), el('th', { class: 'num' }, 'Amount'))),
+            el('tbody', {}, p.lines.map((l) => el('tr', {}, el('td', {}, l.description), el('td', { class: 'num' }, fmtQty(l.quantity, l.unit)),
                 el('td', { class: 'num' }, money(l.unit_price)), el('td', { class: 'num' }, money(l.amount))))),
             el('tfoot', {},
                 el('tr', {}, el('th', { colspan: 3 }, 'Subtotal'), el('td', { class: 'num' }, money(p.subtotal))),
@@ -1287,6 +1296,16 @@ function editInvoiceModal(inv, onSaved) {
 // ---------------------------------------------------------------------------
 // Clients, projects, tasks & categories
 
+const BILLING_UNITS = [['hour', 'Hourly'], ['half_day', 'Half days (any time = at least ½ day)'], ['day', 'Full days (any time = 1 day)']];
+
+function clientRateText(c) {
+    if (c.billing_unit === 'hour') {
+        return c.rate !== null && c.rate !== '' ? money(+c.rate) + '/h' : el('span', { class: 'muted' }, `default ${money(+S.settings.default_rate)}/h`);
+    }
+    const rate = c.rate !== null && c.rate !== '' ? +c.rate : +S.settings.default_day_rate;
+    return [money(rate) + '/day', el('div', { class: 'muted small' }, c.billing_unit === 'half_day' ? 'billed in half days' : 'billed in whole days')];
+}
+
 const RECORDS = {
     clients: {
         title: 'Client',
@@ -1294,7 +1313,11 @@ const RECORDS = {
             { name: 'name', label: 'Name', required: true },
             { name: 'contact', label: 'Contact person' },
             { name: 'email', label: 'Email', type: 'email' },
-            { name: 'rate', label: 'Hourly rate', type: 'number', step: '0.01', placeholder: `Default (${S.settings.default_rate})` },
+            { name: 'billing_unit', label: 'Bill by', type: 'select', options: BILLING_UNITS },
+            { name: 'rate', label: 'Rate (per hour, or per day for day billing)', type: 'number', step: '0.01',
+                placeholder: `Default ${S.settings.default_rate}/hour or ${S.settings.default_day_rate}/day` },
+            { name: 'day_hours', label: 'Working day (hours)', type: 'number', step: '0.25', placeholder: `Default (${S.settings.day_hours})`,
+                hint: 'Half-day billing: up to half of this is ½ day; more is a full day.' },
             { name: 'address', label: 'Invoice address', type: 'textarea' },
             { name: 'tax_rate', label: `${S.settings.tax_label || 'Tax'} rate %`, type: 'number', step: '0.01', placeholder: `Default (${S.settings.tax_rate}%)` },
             { name: 'payment_terms', label: 'Payment terms (days)', type: 'number', placeholder: `Default (${S.settings.payment_terms})` },
@@ -1379,14 +1402,14 @@ function viewManage() {
             S.clients.filter(vis).map((c) => el('tr', { onclick: () => editRecord('clients', c, re) },
                 el('td', {}, el('strong', {}, c.name), archivedBadge(c)),
                 el('td', {}, c.contact || '', c.email ? el('div', { class: 'muted' }, c.email) : null),
-                el('td', {}, rateText(c.rate, `default ${money(+S.settings.default_rate)}/h`)),
+                el('td', {}, clientRateText(c)),
                 el('td', {}, S.projects.filter((p) => p.client_id === c.id && !p.archived).length),
                 el('td', { class: 'row-actions' }, el('button', { class: 'btn small ghost', onclick: (ev) => { ev.stopPropagation(); editRecord('projects', null, re, { client_id: c.id }); } }, '＋ project'))))),
         section('projects', 'Projects', ['Project', 'Client', 'Rate', 'Billable'],
             S.projects.filter((p) => vis(p) && (S.showArchived || !clientOf(p)?.archived)).map((p) => el('tr', { onclick: () => editRecord('projects', p, re) },
                 el('td', {}, projectChip(p.id), p.code ? el('span', { class: 'muted' }, ` (${p.code})`) : null, archivedBadge(p)),
                 el('td', {}, clientOf(p)?.name),
-                el('td', {}, rateText(p.rate, 'client rate')),
+                el('td', {}, clientOf(p)?.billing_unit !== 'hour' ? el('span', { class: 'muted' }, 'client day rate') : rateText(p.rate, 'client rate')),
                 el('td', {}, p.billable ? 'Yes' : 'No')))),
         section('tasks', 'Tasks', ['Task', 'Project', 'Rate'],
             S.tasks.filter(vis).map((t) => el('tr', { onclick: () => editRecord('tasks', t, re) },
@@ -1396,12 +1419,60 @@ function viewManage() {
         section('categories', 'Categories', ['Category'],
             S.categories.filter(vis).map((c) => el('tr', { onclick: () => editRecord('categories', c, re) },
                 el('td', {}, catChip(c), archivedBadge(c))))),
-        el('p', { class: 'muted small' }, 'Rates: an entry uses its own rate override, else its task’s rate, else the project’s, else the client’s, else the default in Settings. Items with history can’t be deleted — archive them instead.'),
+        el('p', { class: 'muted small' }, 'Hourly clients: an entry uses its own rate override, else its task’s rate, else the project’s, else the client’s, else the default in Settings. Half-day and day clients are always charged the client’s day rate, counted per date across all their projects. Items with history can’t be deleted — archive them instead.'),
     ));
 }
 
 // ---------------------------------------------------------------------------
 // Settings
+
+// Passkeys: list, add (this device / a phone or security key) and remove.
+function securitySection() {
+    const box = el('section', { class: 'card', id: 'security' });
+    const render = async () => {
+        const { passkeys, supported_here: domainOk } = await api('passkeys.list');
+        const canAdd = Passkey.supported() && domainOk;
+        fill(box, 
+            el('h2', {}, 'Sign-in & security'),
+            !passkeys.length ? el('p', { class: 'warn' }, 'You have no passkeys yet. Add one so you can sign in with your fingerprint, face or device PIN.') : null,
+            el('p', { class: 'muted' }, 'Sign in with a passkey. If you can’t, the backup is your password plus a code sent to your email address.'),
+            passkeys.length ? el('table', { class: 'list' },
+                el('thead', {}, el('tr', {}, el('th', {}, 'Passkey'), el('th', {}, 'Added'), el('th', {}, 'Last used'), el('th', {}, ''))),
+                el('tbody', {}, passkeys.map((k) => el('tr', {},
+                    el('td', {}, '🔑 ' + k.name),
+                    el('td', {}, fmtDate(k.created_at.slice(0, 10))),
+                    el('td', { class: 'muted' }, k.last_used_at ? fmtDate(k.last_used_at.slice(0, 10)) : 'never'),
+                    el('td', { class: 'row-actions' }, el('button', { class: 'btn small ghost danger', onclick: async () => {
+                        if (!await confirmBox(`Remove the passkey “${k.name}”? You won’t be able to sign in with it any more.`, 'Remove')) return;
+                        attempt(async () => { await api('passkeys.delete', { id: k.id }); toast('Passkey removed'); render(); });
+                    } }, 'Remove')))))) : null,
+            el('div', { class: 'modal-actions' },
+                canAdd ? null : el('span', { class: 'muted small' }, Passkey.supported()
+                    ? 'Passkeys need a domain name — open this app via its web address or http://localhost, not an IP address.'
+                    : 'This browser can’t create passkeys here (they need HTTPS or localhost).'),
+                el('button', { class: 'btn primary', disabled: !canAdd, onclick: () => addPasskey(render) }, '＋ Add a passkey')),
+        );
+    };
+    render().catch((e) => fill(box, el('p', { class: 'error' }, e.message)));
+    return box;
+}
+
+function addPasskey(onDone) {
+    const name = el('input', { type: 'text', value: Passkey.deviceName() });
+    openModal({
+        title: 'Add a passkey',
+        body: el('div', { class: 'form-grid' },
+            el('label', { class: 'full' }, 'Name (so you can tell your passkeys apart)', name),
+            el('p', { class: 'full muted' }, 'Your browser will ask you to confirm with your fingerprint, face, device PIN or security key. To use your phone, pick “use a phone or tablet” when asked.')),
+        actions: [{ label: 'Cancel' }, { label: 'Continue', class: 'primary', submit: true, run: async () => {
+            const options = await api('passkeys.options');
+            const cred = await Passkey.create(options);
+            await api('passkeys.register', { ...cred, name: name.value });
+            toast('Passkey added');
+            onDone();
+        } }],
+    });
+}
 
 function viewSettings() {
     let zones = [];
@@ -1420,6 +1491,8 @@ function viewSettings() {
         { name: 'currency_code', label: 'Currency code', placeholder: 'GBP, EUR, USD…' },
         { name: 'currency_symbol', label: 'Currency symbol' },
         { name: 'default_rate', label: 'Default hourly rate', type: 'number', step: '0.01', hint: 'Used when a client, project or task has no rate.' },
+        { name: 'default_day_rate', label: 'Default day rate', type: 'number', step: '0.01', hint: 'For clients billed by the day or half day.' },
+        { name: 'day_hours', label: 'Working day (hours)', type: 'number', step: '0.25', hint: 'Can be changed per client.' },
         { name: 'payment_terms', label: 'Payment terms (days)', type: 'number' },
         { name: 'tax_label', label: 'Tax name', placeholder: 'VAT' },
         { name: 'tax_rate', label: 'Default tax rate %', type: 'number', step: '0.01', hint: 'Use 0 if you are not registered.' },
@@ -1443,8 +1516,10 @@ function viewSettings() {
                 S.settings = r.settings;
                 toast('Settings saved');
             }) }, 'Save settings'))),
+        securitySection(),
         el('section', { class: 'card' }, el('h2', {}, 'Password'),
-            el('div', { class: 'form-grid' }, el('label', {}, 'Current password', cur), el('label', {}, 'New password (8+ characters)', nw)),
+            el('p', { class: 'muted' }, 'Your password is only used for the backup sign-in, together with a code sent to your email.'),
+            el('div', { class: 'form-grid' }, el('label', {}, 'Current password', cur), el('label', {}, 'New password (10+ characters)', nw)),
             el('div', { class: 'modal-actions' }, el('button', { class: 'btn', onclick: () => attempt(async () => {
                 await api('password.change', { current: cur.value, new: nw.value });
                 cur.value = ''; nw.value = '';

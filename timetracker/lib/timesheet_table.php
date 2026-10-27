@@ -43,7 +43,21 @@ $cols = $showAmounts ? 6 : 5;
             </tr>
         <?php endforeach; $total += $dayTotal; $totalAmount += $dayAmount; ?>
         <tr class="day-total">
-            <th colspan="4">Total for <?= h(fmt_date($date)) ?></th>
+            <th colspan="4">
+                Total for <?= h(fmt_date($date)) ?>
+                <?php
+                // Day-billed clients: show what this date is charged as.
+                $billed = [];
+                foreach ($dayEntries as $de) {
+                    if ($de['bill_units'] !== null) {
+                        $billed[$de['client_name']] = $de['bill_units'];
+                    }
+                }
+                if ($billed): ?>
+                    <span class="sub">— billed as <?= h(implode(', ', array_map(
+                        fn($c, $u) => fmt_days($u) . ($multiClient ? " ($c)" : ''), array_keys($billed), $billed))) ?></span>
+                <?php endif ?>
+            </th>
             <td class="num"><?= fmt_hours($dayTotal) ?></td>
             <?php if ($showAmounts): ?><td class="num"><?= h(fmt_money($dayAmount)) ?></td><?php endif ?>
         </tr>

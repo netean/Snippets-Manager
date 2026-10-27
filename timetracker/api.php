@@ -3,6 +3,8 @@
 // and the session's CSRF token in the X-CSRF-Token header.
 declare(strict_types=1);
 require __DIR__ . '/lib/app.php';
+require __DIR__ . '/lib/mail.php';
+require __DIR__ . '/lib/webauthn.php';
 
 start_session();
 header('Content-Type: application/json; charset=utf-8');
@@ -25,9 +27,6 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 if (!hash_equals($_SESSION['csrf'], (string) ($_SERVER['HTTP_X_CSRF_TOKEN'] ?? ''))) {
     respond(['error' => 'Security token mismatch — please reload the page.'], 403);
 }
-// Release the session lock so slow requests don't block each other.
-session_write_close();
-
 $in = json_decode((string) file_get_contents('php://input'), true);
 if (!is_array($in)) {
     $in = [];
@@ -62,11 +61,20 @@ $actions = [
     'invoices.delete' => 'api_invoices_delete',
     'settings.save' => 'api_settings_save',
     'password.change' => 'api_password_change',
+    'passkeys.list' => 'api_passkeys_list',
+    'passkeys.options' => fn($in) => passkey_registration_options(),
+    'passkeys.register' => 'api_passkeys_register',
+    'passkeys.delete' => 'api_passkeys_delete',
 ];
 
 $action = (string) ($_GET['action'] ?? '');
 if (!isset($actions[$action])) {
     respond(['error' => 'Unknown action'], 404);
+}
+// Release the session lock so slow requests don't block each other
+// (passkey registration keeps it, as it stores a challenge in the session).
+if (!str_starts_with($action, 'passkeys.')) {
+    session_write_close();
 }
 try {
     respond($actions[$action]($in));
@@ -606,8 +614,8 @@ function record_fields(string $table): array
 {
     // field => type (s = text, f = number, i = integer, b = yes/no, r = required text)
     return [
-        'clients' => ['name' => 'r', 'contact' => 's', 'email' => 's', 'address' => 's', 'rate' => 'f', 'tax_rate' => 'f',
-            'payment_terms' => 'i', 'invoice_notes' => 's', 'archived' => 'b'],
+        'clients' => ['name' => 'r', 'contact' => 's', 'email' => 's', 'address' => 's', 'billing_unit' => 's', 'rate' => 'f',
+            'day_hours' => 'f', 'tax_rate' => 'f', 'payment_terms' => 'i', 'invoice_notes' => 's', 'archived' => 'b'],
         'projects' => ['client_id' => 'i', 'name' => 'r', 'code' => 's', 'rate' => 'f', 'color' => 's', 'billable' => 'b', 'archived' => 'b'],
         'tasks' => ['project_id' => 'i', 'name' => 'r', 'rate' => 'f', 'archived' => 'b'],
         'categories' => ['name' => 'r', 'color' => 's', 'archived' => 'b'],
@@ -633,6 +641,14 @@ function api_save_record(string $table, array $in): array
             case 'b': $v = !empty($v) ? 1 : 0; break;
         }
         $values[$f] = $v;
+    }
+    if ($table === 'clients') {
+        if (!in_array($values['billing_unit'], ['hour', 'half_day', 'day'], true)) {
+            $values['billing_unit'] = 'hour';
+        }
+        if ($values['day_hours'] !== null && ($values['day_hours'] <= 0 || $values['day_hours'] > 24)) {
+            throw new UserError('A working day must be between 0 and 24 hours.');
+        }
     }
     if ($table === 'projects' && (!$values['client_id'] || !db()->query('SELECT 1 FROM clients WHERE id = ' . (int) $values['client_id'])->fetchColumn())) {
         throw new UserError('Please choose a client for the project.');
@@ -888,7 +904,7 @@ function api_settings_save(array $in): array
         if ($k === 'timezone' && !in_array($v, timezone_identifiers_list(), true)) {
             throw new UserError('Unknown time zone: ' . $v);
         }
-        if (in_array($k, ['default_rate', 'tax_rate', 'invoice_next', 'invoice_digits', 'payment_terms', 'week_start'], true) && $v !== '' && !is_numeric($v)) {
+        if (in_array($k, ['default_rate', 'default_day_rate', 'day_hours', 'tax_rate', 'invoice_next', 'invoice_digits', 'payment_terms', 'week_start'], true) && $v !== '' && !is_numeric($v)) {
             throw new UserError(str_replace('_', ' ', ucfirst($k)) . ' must be a number.');
         }
         set_setting($k, $v);
@@ -902,9 +918,37 @@ function api_password_change(array $in): array
         throw new UserError('Your current password is not correct.');
     }
     $new = (string) ($in['new'] ?? '');
-    if (strlen($new) < 8) {
-        throw new UserError('Choose a new password of at least 8 characters.');
+    if (strlen($new) < 10) {
+        throw new UserError('Choose a new password of at least 10 characters.');
     }
     set_setting('password_hash', password_hash($new, PASSWORD_DEFAULT));
     return ['ok' => true];
+}
+
+// ---------------------------------------------------------------------------
+// Passkeys
+
+function api_passkeys_list(array $in): array
+{
+    return ['passkeys' => db()->query('SELECT id, name, created_at, last_used_at FROM passkeys ORDER BY id')->fetchAll(),
+        'supported_here' => rp_id() !== '' && !filter_var(rp_id(), FILTER_VALIDATE_IP)];
+}
+
+function api_passkeys_register(array $in): array
+{
+    $r = passkey_register($in);
+    try {
+        send_owner_mail('A passkey was added to ' . APP_NAME,
+            "A new passkey (\"{$r['name']}\") was added to your " . APP_NAME . ' account at ' . date('H:i, j M Y')
+            . ' from ' . ($_SERVER['REMOTE_ADDR'] ?? 'an unknown address') . ".\n\nIf this wasn't you, sign in and remove it under Settings → Sign-in & security, then change your password.\n");
+    } catch (Throwable $e) {
+        error_log('[timetracker] passkey notification failed: ' . $e->getMessage());
+    }
+    return $r;
+}
+
+function api_passkeys_delete(array $in): array
+{
+    db()->prepare('DELETE FROM passkeys WHERE id = ?')->execute([(int) ($in['id'] ?? 0)]);
+    return ['deleted' => 1];
 }

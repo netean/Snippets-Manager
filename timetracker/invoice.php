@@ -83,7 +83,7 @@ $qtyFmt = fn($q) => rtrim(rtrim(number_format((float) $q, 2), '0'), '.');
         <?php foreach ($lines as $l): ?>
             <tr>
                 <td><?= h($l['description']) ?></td>
-                <td class="num"><?= h($qtyFmt($l['quantity'])) ?><?= $l['unit'] ? ' ' . h($l['unit'] === 'hours' && (float) $l['quantity'] == 1.0 ? 'hour' : $l['unit']) : '' ?></td>
+                <td class="num"><?= h(fmt_qty((float) $l['quantity'], $l['unit'])) ?></td>
                 <td class="num"><?= h(fmt_money((float) $l['unit_price'])) ?></td>
                 <td class="num"><?= h(fmt_money((float) $l['amount'])) ?></td>
             </tr>

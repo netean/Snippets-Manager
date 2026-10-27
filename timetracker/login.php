@@ -4,6 +4,7 @@ require __DIR__ . '/lib/app.php';
 
 start_session();
 send_security_headers();
+header('X-Robots-Tag: noindex, nofollow');
 
 if (isset($_GET['logout'])) {
     if (hash_equals($_SESSION['csrf'], (string) ($_GET['t'] ?? ''))) {
@@ -13,83 +14,70 @@ if (isset($_GET['logout'])) {
     header('Location: login.php');
     exit;
 }
+if (is_logged_in()) {
+    header('Location: ./');
+    exit;
+}
 
 $setup = !password_is_set();
-$error = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $password = (string) ($_POST['password'] ?? '');
-    if (!hash_equals($_SESSION['csrf'], (string) ($_POST['csrf'] ?? ''))) {
-        $error = 'Your session expired. Please try again.';
-    } elseif ($setup) {
-        if (strlen($password) < 8) {
-            $error = 'Choose a password of at least 8 characters.';
-        } elseif ($password !== (string) ($_POST['confirm'] ?? '')) {
-            $error = 'The two passwords do not match.';
-        } else {
-            set_setting('password_hash', password_hash($password, PASSWORD_DEFAULT));
-            $tz = (string) ($_POST['tz'] ?? '');
-            if ($tz !== '' && in_array($tz, timezone_identifiers_list(), true)) {
-                set_setting('timezone', $tz);
-            }
-            session_regenerate_id(true);
-            $_SESSION['auth'] = true;
-            header('Location: ./#settings');
-            exit;
-        }
-    } else {
-        $lockedUntil = (int) setting('login_locked_until');
-        if ($lockedUntil > time()) {
-            $error = 'Too many failed attempts. Try again in ' . ceil(($lockedUntil - time()) / 60) . ' minute(s).';
-        } elseif (password_verify($password, (string) setting('password_hash'))) {
-            set_setting('login_failures', '0');
-            if (password_needs_rehash((string) setting('password_hash'), PASSWORD_DEFAULT)) {
-                set_setting('password_hash', password_hash($password, PASSWORD_DEFAULT));
-            }
-            session_regenerate_id(true);
-            $_SESSION['auth'] = true;
-            header('Location: ./');
-            exit;
-        } else {
-            usleep(500000);
-            $failures = (int) setting('login_failures') + 1;
-            set_setting('login_failures', (string) $failures);
-            if ($failures >= 5) {
-                set_setting('login_locked_until', (string) (time() + 900));
-                set_setting('login_failures', '0');
-            }
-            $error = 'Incorrect password.';
-        }
-    }
-}
+$hasPasskeys = !$setup && (int) db()->query('SELECT COUNT(*) FROM passkeys')->fetchColumn() > 0;
 ?><!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
+<meta name="csrf-token" content="<?= h($_SESSION['csrf']) ?>">
 <title><?= h(APP_NAME) ?> — <?= $setup ? 'Set up' : 'Sign in' ?></title>
 <link rel="stylesheet" href="assets/app.css?v=<?= APP_VERSION ?>">
 </head>
-<body class="login-page">
-<form method="post" class="card login-card">
+<body class="login-page" data-mode="<?= $setup ? 'setup' : 'login' ?>" data-passkeys="<?= $hasPasskeys ? '1' : '0' ?>">
+<main class="card login-card">
     <h1><?= h(APP_NAME) ?></h1>
+    <p class="error" id="error" hidden></p>
+    <p class="notice" id="notice" hidden></p>
+
     <?php if ($setup): ?>
-        <p class="muted">Welcome! Choose the password you will use to sign in. You are the only user.</p>
+        <section data-step="setup-start">
+            <p class="muted">Welcome! To prove this is you, we’ll email a 6-digit code to the address set up on the server.</p>
+            <button class="btn primary" type="button" id="setup-send">Email me a setup code</button>
+        </section>
+        <form data-step="setup-finish" hidden>
+            <label>Code from the email
+                <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
+            </label>
+            <label>Choose a password (10+ characters)
+                <input type="password" name="password" autocomplete="new-password" minlength="10" required>
+            </label>
+            <label>Confirm password
+                <input type="password" name="confirm" autocomplete="new-password" required>
+            </label>
+            <button class="btn primary" type="submit">Finish setting up</button>
+            <p class="muted small">Next you’ll be able to add a passkey so you can sign in with your fingerprint, face or device PIN.</p>
+        </form>
+    <?php else: ?>
+        <section data-step="passkey">
+            <button class="btn primary big" type="button" id="passkey-login">🔑 Sign in with a passkey</button>
+            <button class="btn ghost small" type="button" data-goto="backup-password">Can’t use your passkey? Use your password and an email code</button>
+        </section>
+        <form data-step="backup-password" hidden>
+            <label>Password
+                <input type="password" name="password" autocomplete="current-password" required>
+            </label>
+            <button class="btn primary" type="submit">Continue</button>
+            <button class="btn ghost small" type="button" data-goto="passkey" data-needs-passkey>Back to passkey sign-in</button>
+        </form>
+        <form data-step="backup-code" hidden>
+            <p class="muted">We’ve emailed you a 6-digit code. It expires in 10 minutes.</p>
+            <label>Code
+                <input name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" required>
+            </label>
+            <button class="btn primary" type="submit">Sign in</button>
+            <button class="btn ghost small" type="button" data-goto="backup-password">Send a new code</button>
+        </form>
     <?php endif ?>
-    <?php if ($error): ?><p class="error"><?= h($error) ?></p><?php endif ?>
-    <input type="hidden" name="csrf" value="<?= h($_SESSION['csrf']) ?>">
-    <label>Password
-        <input type="password" name="password" required autofocus autocomplete="<?= $setup ? 'new-password' : 'current-password' ?>">
-    </label>
-    <?php if ($setup): ?>
-        <label>Confirm password
-            <input type="password" name="confirm" required autocomplete="new-password">
-        </label>
-        <input type="hidden" name="tz" id="tz">
-        <script src="assets/login.js"></script>
-    <?php endif ?>
-    <button class="btn primary" type="submit"><?= $setup ? 'Create password' : 'Sign in' ?></button>
-</form>
+</main>
+<script src="assets/passkey.js?v=<?= APP_VERSION ?>"></script>
+<script src="assets/login.js?v=<?= APP_VERSION ?>"></script>
 </body>
 </html>

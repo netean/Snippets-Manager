@@ -32,6 +32,7 @@ require_login();
 </header>
 <main id="view"><p class="muted">Loading…</p></main>
 <div id="toast" class="toast" hidden></div>
+<script src="assets/passkey.js?v=<?= APP_VERSION ?>"></script>
 <script src="assets/app.js?v=<?= APP_VERSION ?>"></script>
 </body>
 </html>

@@ -288,3 +288,10 @@ td.row-actions { display: table-cell; text-align: right; }
     #nav { order: 4; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 4px; }
     #nav a { white-space: nowrap; }
 }
+
+/* Sign-in */
+.login-card section, .login-card form { display: flex; flex-direction: column; gap: 12px; }
+.login-card .btn.big { padding: 12px 16px; font-size: 16px; }
+.login-card .btn.ghost.small { color: var(--muted); white-space: normal; }
+.notice { background: var(--accent-soft); padding: 8px 10px; border-radius: var(--radius); margin: 0; }
+.login-card .error { margin: 0; }
