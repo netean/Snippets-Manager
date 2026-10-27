@@ -291,7 +291,7 @@ function categoryPicker(selectedIds = [], onchange) {
     const panel = el('div', { class: 'cat-panel', hidden: true });
     const renderBtn = () => {
         const chosen = S.categories.filter((c) => selected.has(c.id));
-        btn.replaceChildren(chosen.length ? chosen.map(catChip) : el('span', { class: 'muted' }, '🏷 Categories'));
+        btn.replaceChildren(...(chosen.length ? chosen.map(catChip) : [el('span', { class: 'muted' }, '🏷 Categories')]));
     };
     const renderPanel = () => {
         const newInput = el('input', { type: 'text', placeholder: 'New category…', onkeydown: (ev) => {
@@ -1254,7 +1254,7 @@ function renderPreview(box, p) {
         box.replaceChildren(el('p', { class: 'muted empty' }, 'No un-invoiced billable time for this client and period.'));
         return;
     }
-    box.replaceChildren(
+    box.replaceChildren(...[
         el('h3', {}, `Preview — ${p.entry_count} time entries`),
         el('table', { class: 'list' },
             el('thead', {}, el('tr', {}, el('th', {}, 'Description'), el('th', { class: 'num' }, 'Hours'), el('th', { class: 'num' }, 'Rate'), el('th', { class: 'num' }, 'Amount'))),
@@ -1264,7 +1264,8 @@ function renderPreview(box, p) {
                 el('tr', {}, el('th', { colspan: 3 }, 'Subtotal'), el('td', { class: 'num' }, money(p.subtotal))),
                 p.tax_rate ? el('tr', {}, el('th', { colspan: 3 }, `${S.settings.tax_label || 'Tax'} @ ${p.tax_rate}%`), el('td', { class: 'num' }, money(p.tax))) : null,
                 el('tr', { class: 'grand' }, el('th', { colspan: 3 }, 'Total'), el('td', { class: 'num' }, money(p.total))))),
-        p.lines.some((l) => !l.unit_price) ? el('p', { class: 'warn' }, 'Some lines have no rate. Set an hourly rate on the client, project or task (or a default in Settings).') : null);
+        p.lines.some((l) => !l.unit_price) ? el('p', { class: 'warn' }, 'Some lines have no rate. Set an hourly rate on the client, project or task (or a default in Settings).') : null,
+    ].filter(Boolean));
 }
 
 function editInvoiceModal(inv, onSaved) {

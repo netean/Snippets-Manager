@@ -278,3 +278,13 @@ dialog::backdrop { background: rgba(15, 23, 42, .45); }
     #nav a { padding: 10px 8px; }
 }
 td.row-actions { display: table-cell; text-align: right; }
+
+/* Phones: keep the header to two compact rows */
+@media (max-width: 800px) {
+    .topbar { gap: 0 10px; padding: 0 12px; }
+    .brand { order: 1; padding: 10px 0; }
+    .running-indicator { order: 2; margin-left: auto; font-size: 12px; max-width: 55vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .logout { order: 3; }
+    #nav { order: 4; width: 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 4px; }
+    #nav a { white-space: nowrap; }
+}
