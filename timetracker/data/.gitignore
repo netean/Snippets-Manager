@@ -1,0 +1,4 @@
+# Your data lives here; it is not committed.
+*
+!.gitignore
+!.htaccess

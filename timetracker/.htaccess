@@ -1,0 +1,12 @@
+# Apache / LiteSpeed (most shared hosting). Point your subdomain's document root at this folder.
+Options -Indexes
+DirectoryIndex index.php
+
+<FilesMatch "^(config|config\.sample|router)\.php$|\.(sqlite|db|md|sh|bat)$">
+    Require all denied
+</FilesMatch>
+
+# Uncomment to force HTTPS (recommended once your subdomain has a certificate):
+# RewriteEngine On
+# RewriteCond %{HTTPS} !=on
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
