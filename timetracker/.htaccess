@@ -2,7 +2,7 @@
 Options -Indexes
 DirectoryIndex index.php
 
-<FilesMatch "^(config|config\.sample|router)\.php$|\.(sqlite|db|md|sh|bat)$">
+<FilesMatch "^(config|config\.sample|router)\.php$|\.(sqlite|db|md|sh|bat|conf|log)$">
     Require all denied
 </FilesMatch>
 

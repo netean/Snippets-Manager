@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 const APP_NAME = 'Timesheets';
-const APP_VERSION = '1.1';
+const APP_VERSION = '1.2';
 
 class UserError extends RuntimeException {}
 
@@ -442,18 +442,32 @@ function entry_filter(array $f): array
     return [implode(' AND ', $where), $params];
 }
 
-/** Entries matching the filters, with names, effective rate, amount and category ids. */
-function fetch_entries(array $filters, string $order = 'e.date, e.start_time IS NULL, e.start_time, e.id'): array
+const ENTRY_ORDER = 'e.date, e.start_time IS NULL, e.start_time, e.id';
+
+/**
+ * Entries matching the filters, one at a time, with names, effective rate,
+ * amount and category ids. Reading row by row keeps memory flat however much
+ * history there is, which matters on a small server.
+ */
+function iterate_entries(array $filters, string $order = ENTRY_ORDER): Generator
 {
     [$where, $params] = entry_filter($filters);
     $params[':defrate'] = (float) setting('default_rate');
     $params[':defday'] = (float) setting('default_day_rate');
     // Day-billed clients always use the client's day rate; overrides only apply to hourly billing.
-    $sql = "SELECT e.*, p.name AS project_name, p.code AS project_code, p.color AS project_color,
+    // day_total is the client's billable time that whole date (whatever the filters), which
+    // decides whether the date counts as half a day or a full day.
+    $sql = "SELECT e.id, e.date, e.start_time, e.end_time, e.minutes, e.description, e.project_id, e.task_id,
+                   e.billable, e.rate, e.invoice_id,
+                   p.name AS project_name, p.code AS project_code, p.color AS project_color,
                    p.client_id, c.name AS client_name, t.name AS task_name, i.number AS invoice_number,
                    c.billing_unit, c.day_hours,
                    CASE WHEN c.billing_unit = 'hour' THEN COALESCE(e.rate, t.rate, p.rate, c.rate, :defrate)
-                        ELSE COALESCE(c.rate, :defday) END AS eff_rate
+                        ELSE COALESCE(c.rate, :defday) END AS eff_rate,
+                   CASE WHEN c.billing_unit = 'hour' OR e.billable = 0 THEN NULL ELSE
+                        (SELECT SUM(e2.minutes) FROM entries e2 JOIN projects p2 ON p2.id = e2.project_id
+                         WHERE e2.date = e.date AND e2.billable = 1 AND p2.client_id = p.client_id) END AS day_total,
+                   (SELECT GROUP_CONCAT(ec2.category_id) FROM entry_categories ec2 WHERE ec2.entry_id = e.id) AS category_list
             FROM entries e
             JOIN projects p ON p.id = e.project_id
             JOIN clients c ON c.id = p.client_id
@@ -463,20 +477,8 @@ function fetch_entries(array $filters, string $order = 'e.date, e.start_time IS 
             ORDER BY $order";
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    $rows = $stmt->fetchAll();
-    if (!$rows) {
-        return [];
-    }
-
-    $cats = [];
-    $ids = array_column($rows, 'id');
-    foreach (array_chunk($ids, 500) as $chunk) {
-        $in = implode(',', array_map('intval', $chunk));
-        foreach (db()->query("SELECT entry_id, category_id FROM entry_categories WHERE entry_id IN ($in)") as $r) {
-            $cats[$r['entry_id']][] = (int) $r['category_id'];
-        }
-    }
-    foreach ($rows as &$r) {
+    $defaultDayHours = (float) setting('day_hours');
+    while ($r = $stmt->fetch()) {
         foreach (['id', 'minutes', 'project_id', 'client_id', 'billable'] as $k) {
             $r[$k] = (int) $r[$k];
         }
@@ -484,14 +486,29 @@ function fetch_entries(array $filters, string $order = 'e.date, e.start_time IS 
         $r['invoice_id'] = $r['invoice_id'] === null ? null : (int) $r['invoice_id'];
         $r['rate'] = $r['rate'] === null ? null : (float) $r['rate'];
         $r['eff_rate'] = (float) $r['eff_rate'];
-        $r['day_hours'] = $r['day_hours'] === null ? (float) setting('day_hours') : (float) $r['day_hours'];
-        $r['amount'] = $r['billable'] && $r['billing_unit'] === 'hour' ? round($r['minutes'] / 60 * $r['eff_rate'], 2) : 0.0;
+        $r['day_hours'] = $r['day_hours'] === null ? $defaultDayHours : (float) $r['day_hours'];
+        $r['category_ids'] = $r['category_list'] === null ? [] : array_map('intval', explode(',', $r['category_list']));
+        unset($r['category_list']);
         $r['bill_units'] = null;
-        $r['category_ids'] = $cats[$r['id']] ?? [];
+        if (!$r['billable']) {
+            $r['amount'] = 0.0;
+        } elseif ($r['billing_unit'] === 'hour') {
+            $r['amount'] = round($r['minutes'] / 60 * $r['eff_rate'], 2);
+        } else {
+            // Share the date's day charge between its entries in proportion to their time.
+            $total = max((int) $r['day_total'], $r['minutes']);
+            $r['bill_units'] = day_units($r['billing_unit'], $total, $r['day_hours']);
+            $r['amount'] = $total > 0 ? round($r['bill_units'] * $r['eff_rate'] * $r['minutes'] / $total, 2) : 0.0;
+        }
+        unset($r['day_total']);
+        yield $r;
     }
-    unset($r);
-    apply_day_billing($rows);
-    return $rows;
+}
+
+/** All matching entries as an array — for bounded ranges such as a week or one invoice. */
+function fetch_entries(array $filters, string $order = ENTRY_ORDER): array
+{
+    return iterator_to_array(iterate_entries($filters, $order), false);
 }
 
 /**
@@ -508,39 +525,6 @@ function day_units(string $unit, int $minutes, float $dayHours): float
         return 1.0;
     }
     return $minutes <= $dayHours * 30 ? 0.5 : 1.0;
-}
-
-/**
- * For day-billed clients, works out the days billed per client per date (from all
- * billable time that date, whatever filters are applied) and shares the amount
- * between that date's entries in proportion to their time.
- */
-function apply_day_billing(array &$rows): void
-{
-    $pairs = [];
-    foreach ($rows as $r) {
-        if ($r['billable'] && $r['billing_unit'] !== 'hour') {
-            $pairs[$r['client_id']][$r['date']] = true;
-        }
-    }
-    if (!$pairs) {
-        return;
-    }
-    $totals = [];
-    $s = db()->prepare('SELECT e.date, SUM(e.minutes) FROM entries e JOIN projects p ON p.id = e.project_id
-        WHERE e.billable = 1 AND p.client_id = ? AND e.date BETWEEN ? AND ? GROUP BY e.date');
-    foreach ($pairs as $clientId => $dates) {
-        $s->execute([$clientId, min(array_keys($dates)), max(array_keys($dates))]);
-        $totals[$clientId] = array_map('intval', $s->fetchAll(PDO::FETCH_KEY_PAIR));
-    }
-    foreach ($rows as &$r) {
-        if (!$r['billable'] || $r['billing_unit'] === 'hour') {
-            continue;
-        }
-        $total = $totals[$r['client_id']][$r['date']] ?? $r['minutes'];
-        $r['bill_units'] = day_units($r['billing_unit'], $total, $r['day_hours']);
-        $r['amount'] = $total > 0 ? round($r['bill_units'] * $r['eff_rate'] * $r['minutes'] / $total, 2) : 0.0;
-    }
 }
 
 function fmt_qty(float $q, ?string $unit): string
@@ -573,10 +557,10 @@ function category_names(): array
 }
 
 /** Totals grouped several ways, used by the reports screen and printable reports. */
-function summarise(array $entries): array
+function summarise(iterable $entries): array
 {
     $catNames = category_names();
-    $out = ['minutes' => 0, 'billable_minutes' => 0, 'amount' => 0.0, 'uninvoiced_amount' => 0.0, 'count' => count($entries),
+    $out = ['minutes' => 0, 'billable_minutes' => 0, 'amount' => 0.0, 'uninvoiced_amount' => 0.0, 'count' => 0,
         'clients' => [], 'projects' => [], 'tasks' => [], 'categories' => [], 'days' => []];
     $add = function (array &$bucket, $key, string $label, array $e, array $extra = []) {
         if (!isset($bucket[$key])) {
@@ -589,6 +573,7 @@ function summarise(array $entries): array
         $bucket[$key]['amount'] += $e['amount'];
     };
     foreach ($entries as $e) {
+        $out['count']++;
         $out['minutes'] += $e['minutes'];
         if ($e['billable']) {
             $out['billable_minutes'] += $e['minutes'];
@@ -625,6 +610,7 @@ function summarise(array $entries): array
  * $group: project | task | day | entry
  * Hourly clients are billed by the hour; half-day and day clients by the days
  * worked (see day_units), grouped by the set of projects worked that date.
+ * Entries are read one at a time and only per-line totals are kept.
  */
 function build_invoice_lines(?int $clientId, ?string $from, ?string $to, string $group): array
 {
@@ -632,10 +618,8 @@ function build_invoice_lines(?int $clientId, ?string $from, ?string $to, string 
     if ($clientId) {
         $filters['client_id'] = $clientId;
     }
-    $entries = fetch_entries($filters, 'c.name COLLATE NOCASE, p.name COLLATE NOCASE, e.date, e.start_time, e.id');
-    $multiClient = $clientId === null && count(array_unique(array_column($entries, 'client_id'))) > 1;
-    $prefix = fn($e) => $multiClient ? $e['client_name'] . ' — ' : '';
     $lines = [];
+    $clients = [];
     $add = function (string $key, array $init, int $minutes, float $units, array $ids) use (&$lines) {
         if (!isset($lines[$key])) {
             $lines[$key] = $init + ['minutes' => 0, 'units' => 0.0, 'entry_ids' => []];
@@ -644,60 +628,65 @@ function build_invoice_lines(?int $clientId, ?string $from, ?string $to, string 
         $lines[$key]['units'] += $units;
         array_push($lines[$key]['entry_ids'], ...$ids);
     };
+    // Day-billed time per client per date: minutes, project names and entry ids only.
+    $days = [];
 
-    $byDay = [];
-    foreach ($entries as $e) {
+    foreach (iterate_entries($filters, 'c.name COLLATE NOCASE, p.name COLLATE NOCASE, e.date, e.start_time, e.id') as $e) {
+        $clients[$e['client_id']] = true;
         if ($e['billing_unit'] !== 'hour') {
-            $byDay[$e['client_id']][$e['date']][] = $e;
+            $d = &$days[$e['client_id']][$e['date']];
+            $d ??= ['minutes' => 0, 'projects' => [], 'ids' => [], 'unit' => $e['billing_unit'], 'day_hours' => $e['day_hours'],
+                'rate' => $e['eff_rate'], 'client' => $e['client_name']];
+            $d['minutes'] += $e['minutes'];
+            $d['projects'][$e['project_id']] = $e['project_name'];
+            $d['ids'][] = $e['id'];
+            unset($d);
             continue;
         }
-        $proj = $prefix($e) . $e['project_name'];
         $base = ['unit' => 'hours', 'unit_price' => $e['eff_rate'], 'client_id' => $e['client_id'], 'project_id' => $e['project_id'],
-            'client_name' => $e['client_name'], 'sort_date' => ''];
+            'client_name' => $e['client_name'], 'sort_date' => '', 'date_label' => ''];
         switch ($group) {
             case 'task':
                 $key = "h{$e['project_id']}|{$e['task_id']}|{$e['eff_rate']}";
-                $desc = $proj . ($e['task_name'] ? ': ' . $e['task_name'] : '');
+                $what = $e['project_name'] . ($e['task_name'] ? ': ' . $e['task_name'] : '');
                 break;
             case 'day':
                 $key = "h{$e['date']}|{$e['project_id']}|{$e['eff_rate']}";
-                $desc = fmt_date($e['date']) . ' — ' . $proj;
+                $what = $e['project_name'];
                 $base['sort_date'] = $e['date'];
+                $base['date_label'] = fmt_date($e['date']);
                 break;
             case 'entry':
                 $key = 'e' . $e['id'];
-                $what = $e['description'] ?: ($e['task_name'] ?: '');
-                $desc = fmt_date($e['date']) . ' — ' . $proj . ($what !== '' ? ': ' . $what : '');
+                $detail = $e['description'] ?: ($e['task_name'] ?: '');
+                $what = $e['project_name'] . ($detail !== '' ? ': ' . $detail : '');
                 $base['sort_date'] = $e['date'];
+                $base['date_label'] = fmt_date($e['date']);
                 break;
             default:
                 $key = "h{$e['project_id']}|{$e['eff_rate']}";
-                $desc = $proj;
+                $what = $e['project_name'];
         }
-        $add($key, $base + ['description' => $desc], $e['minutes'], 0.0, [$e['id']]);
+        $add($key, $base + ['what' => $what], $e['minutes'], 0.0, [$e['id']]);
     }
 
-    foreach ($byDay as $cid => $dates) {
-        foreach ($dates as $date => $dayEntries) {
-            $first = $dayEntries[0];
-            $minutes = array_sum(array_column($dayEntries, 'minutes'));
-            $units = day_units($first['billing_unit'], $minutes, $first['day_hours']);
-            $projects = array_values(array_unique(array_column($dayEntries, 'project_name')));
-            $projectIds = array_values(array_unique(array_column($dayEntries, 'project_id')));
+    foreach ($days as $cid => $dates) {
+        foreach ($dates as $date => $d) {
+            $units = day_units($d['unit'], $d['minutes'], $d['day_hours']);
+            $projectIds = array_keys($d['projects']);
             sort($projectIds);
-            $label = $prefix($first) . implode(' & ', $projects);
-            $base = ['unit' => 'days', 'unit_price' => $first['eff_rate'], 'client_id' => $cid,
-                'project_id' => count($projectIds) === 1 ? $projectIds[0] : null, 'client_name' => $first['client_name']];
+            $base = ['unit' => 'days', 'unit_price' => $d['rate'], 'client_id' => $cid, 'client_name' => $d['client'],
+                'project_id' => count($projectIds) === 1 ? $projectIds[0] : null, 'what' => implode(' & ', $d['projects'])];
             if ($group === 'day' || $group === 'entry') {
-                $add("d$cid|$date", $base + ['description' => fmt_date($date) . ' — ' . $label, 'sort_date' => $date],
-                    $minutes, $units, array_column($dayEntries, 'id'));
+                $add("d$cid|$date", $base + ['sort_date' => $date, 'date_label' => fmt_date($date)], $d['minutes'], $units, $d['ids']);
             } else {
-                $add("d$cid|" . implode(',', $projectIds), $base + ['description' => $label, 'sort_date' => ''],
-                    $minutes, $units, array_column($dayEntries, 'id'));
+                $add("d$cid|" . implode(',', $projectIds), $base + ['sort_date' => '', 'date_label' => ''], $d['minutes'], $units, $d['ids']);
             }
         }
     }
+    unset($days);
 
+    $multiClient = $clientId === null && count($clients) > 1;
     $lines = array_values($lines);
     $order = array_keys($lines);
     usort($order, fn($a, $b) => [strtolower($lines[$a]['client_name']), $lines[$a]['sort_date'], $a]
@@ -705,10 +694,12 @@ function build_invoice_lines(?int $clientId, ?string $from, ?string $to, string 
     $out = [];
     foreach ($order as $i) {
         $l = $lines[$i];
+        $label = ($multiClient ? $l['client_name'] . ' — ' : '') . $l['what'];
+        $l['description'] = $l['date_label'] !== '' ? $l['date_label'] . ' — ' . $label : $label;
         // The amount is the quantity shown times the rate, so the invoice always adds up.
         $l['quantity'] = $l['unit'] === 'days' ? $l['units'] : round($l['minutes'] / 60, 2);
         $l['amount'] = round($l['quantity'] * $l['unit_price'], 2);
-        unset($l['units'], $l['client_name'], $l['sort_date']);
+        unset($l['units'], $l['client_name'], $l['sort_date'], $l['date_label'], $l['what']);
         $out[] = $l;
     }
     return $out;

@@ -28,6 +28,7 @@ require_login();
         <a href="#settings">Settings</a>
     </nav>
     <span id="running-indicator" class="running-indicator" hidden></span>
+    <span id="who" class="who"></span>
     <a class="logout" href="login.php?logout=1&amp;t=<?= h($_SESSION['csrf']) ?>">Sign out</a>
 </header>
 <main id="view"><p class="muted">Loading…</p></main>

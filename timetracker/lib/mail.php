@@ -1,8 +1,9 @@
 <?php
 // Sends the sign-in code emails. Configure in config.php:
-//   'mail' => ['transport' => 'mail']                      PHP's mail() (most web hosts)
-//   'mail' => ['transport' => 'smtp', 'host' => …, …]      an SMTP server, e.g. Gmail with an app password
-//   'mail' => ['transport' => 'log']                       write to data/mail.log (testing only)
+//   'mail' => ['transport' => 'brevo', 'api_key' => …, 'from' => …]   Brevo's transactional email API
+//   'mail' => ['transport' => 'smtp', 'host' => …, …]                 any SMTP server (Brevo relay, Gmail…)
+//   'mail' => ['transport' => 'mail']                                 PHP's mail() (some web hosts)
+//   'mail' => ['transport' => 'log']                                  write to data/mail.log (testing only)
 declare(strict_types=1);
 
 function owner_email(): string
@@ -17,10 +18,17 @@ function owner_email(): string
 function send_owner_mail(string $subject, string $body): void
 {
     $to = owner_email();
-    $cfg = (array) (config()['mail'] ?? []) + ['transport' => 'mail'];
+    $cfg = mail_config();
     $host = preg_replace('/:\d+$/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    $from = (string) ($cfg['from'] ?? ($cfg['username'] ?? 'timesheets@' . $host));
-    $fromName = (string) ($cfg['from_name'] ?? APP_NAME);
+    $from = trim((string) ($cfg['from'] ?? ''));
+    if ($from === '') {
+        // Relay services (Brevo, Gmail) only accept a sender address you have verified with them.
+        if (in_array($cfg['transport'], ['brevo', 'smtp'], true)) {
+            throw new UserError("Add the sender address ('from') to the mail settings in config.php.");
+        }
+        $from = 'timesheets@' . $host;
+    }
+    $fromName = (string) ($cfg['from_name'] ?? (trim((string) setting('business_name')) ?: APP_NAME));
     $encodedSubject = '=?UTF-8?B?' . base64_encode($subject) . '?=';
     $headers = [
         'Date: ' . date(DATE_RFC2822),
@@ -37,6 +45,9 @@ function send_owner_mail(string $subject, string $body): void
         case 'log':
             file_put_contents(data_dir() . '/mail.log', "To: $to\nSubject: $subject\n\n$body\n-----\n", FILE_APPEND | LOCK_EX);
             return;
+        case 'brevo':
+            brevo_send($cfg, $from, $fromName, $to, $subject, $body);
+            return;
         case 'smtp':
             $message = implode("\r\n", array_merge($headers, ["To: <$to>", "Subject: $encodedSubject"])) . "\r\n\r\n" . str_replace("\n", "\r\n", $body);
             smtp_send($cfg, $from, $to, $message);
@@ -45,6 +56,73 @@ function send_owner_mail(string $subject, string $body): void
             if (!mail($to, $encodedSubject, $body, implode("\r\n", $headers), '-f' . $from)) {
                 throw new RuntimeException('mail() failed');
             }
+    }
+}
+
+function mail_config(): array
+{
+    return (array) (config()['mail'] ?? []) + ['transport' => 'mail'];
+}
+
+/** What the Settings page may show about email delivery: no addresses, keys or passwords. */
+function mail_status(): array
+{
+    $cfg = mail_config();
+    $configured = filter_var(trim((string) (config()['owner_email'] ?? '')), FILTER_VALIDATE_EMAIL) !== false;
+    switch ($cfg['transport']) {
+        case 'brevo':
+            $how = 'Brevo API';
+            $configured = $configured && !empty($cfg['api_key']) && !empty($cfg['from']);
+            break;
+        case 'smtp':
+            $how = 'SMTP via ' . ($cfg['host'] ?? '?') . ':' . ($cfg['port'] ?? 587);
+            $configured = $configured && !empty($cfg['host']) && !empty($cfg['from']);
+            break;
+        case 'log':
+            $how = 'Log file only (testing — emails are not sent)';
+            break;
+        default:
+            $how = 'PHP mail() on this server';
+    }
+    return ['method' => $how, 'configured' => $configured];
+}
+
+/** Brevo transactional email API (https://developers.brevo.com/reference/sendtransacemail). */
+function brevo_send(array $cfg, string $from, string $fromName, string $to, string $subject, string $body): void
+{
+    $key = trim((string) ($cfg['api_key'] ?? ''));
+    if ($key === '') {
+        throw new UserError("Add your Brevo API key ('api_key') to the mail settings in config.php.");
+    }
+    $url = (string) ($cfg['api_url'] ?? 'https://api.brevo.com/v3/smtp/email');
+    $payload = json_encode([
+        'sender' => ['name' => $fromName, 'email' => $from],
+        'to' => [['email' => $to]],
+        'subject' => $subject,
+        'textContent' => $body,
+        'tags' => ['timesheets'],
+    ], JSON_UNESCAPED_UNICODE);
+    $headers = ['api-key: ' . $key, 'Content-Type: application/json', 'Accept: application/json'];
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => $payload, CURLOPT_HTTPHEADER => $headers,
+            CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 10]);
+        $response = curl_exec($ch);
+        $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+        $error = $response === false ? curl_error($ch) : '';
+        curl_close($ch);
+    } else {
+        $ctx = stream_context_create(['http' => ['method' => 'POST', 'header' => implode("\r\n", $headers),
+            'content' => $payload, 'timeout' => 20, 'ignore_errors' => true]]);
+        $response = @file_get_contents($url, false, $ctx);
+        $lines = function_exists('http_get_last_response_headers') ? (http_get_last_response_headers() ?? []) : ($http_response_header ?? []);
+        $status = preg_match('#^HTTP/\S+\s+(\d{3})#', (string) ($lines[0] ?? ''), $m) ? (int) $m[1] : 0;
+        $error = $response === false ? (string) (error_get_last()['message'] ?? 'no response') : '';
+    }
+    if ($response === false || $status < 200 || $status >= 300) {
+        $detail = $error ?: (json_decode((string) $response, true)['message'] ?? trim((string) $response));
+        throw new RuntimeException("Brevo API error (HTTP $status): $detail");
     }
 }
 

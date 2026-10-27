@@ -295,3 +295,8 @@ td.row-actions { display: table-cell; text-align: right; }
 .login-card .btn.ghost.small { color: var(--muted); white-space: normal; }
 .notice { background: var(--accent-soft); padding: 8px 10px; border-radius: var(--radius); margin: 0; }
 .login-card .error { margin: 0; }
+.who { margin-left: auto; color: var(--muted); font-size: 13px; }
+.running-indicator + .who { margin-left: 0; }
+.who + .logout { margin-left: 0; }
+.badge.ok { color: var(--ok); border-color: var(--ok); }
+@media (max-width: 800px) { .who { display: none; } }

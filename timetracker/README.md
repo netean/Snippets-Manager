@@ -4,7 +4,8 @@ A small, single-user time tracker and invoicing tool for freelancers and contrac
 It takes ideas from Clockify and solidtime and leaves out the team features.
 
 * **PHP 8.1+ and SQLite**: no framework, no build step, no database server. All your data is in one file.
-* **Runs two ways**: on a subdomain of your website (e.g. `time.example.com`), or from a shared drive with PHP's built-in server.
+* **Light**: runs happily on a 1 GB, 1 CPU server next to another site; it uses no memory while idle.
+* **Runs on a subdomain** of your website (e.g. `time.example.com`), with nginx or Apache, or from a shared drive with PHP's built-in server.
 
 ## What it does
 
@@ -20,22 +21,51 @@ It takes ideas from Clockify and solidtime and leaves out the team features.
 | **Sign-in** | Everything is behind sign-in. You sign in with a **passkey** (fingerprint, face or device PIN). The backup is your **password plus a 6-digit code emailed to you**, so it is still two factors. First-time setup also needs an emailed code, so nobody else can claim your site. You get an email whenever a passkey is added. Your email address lives only in `config.php` on the server; it is never shown in the app or committed to git. |
 | **Safety** | CSRF protection, lock-out after 5 wrong passwords, limits on code attempts and resends, private folders blocked from the web, and a one-click database backup. |
 
-## Option A — on a subdomain of your website
+## Option A — your own Linux server (AlmaLinux 10 + nginx)
 
-Works on almost any shared host (cPanel, Plesk, etc.) running Apache or LiteSpeed with PHP 8.1+.
+This is the recommended setup. It's built for a small server: 1 GB of RAM and 1 CPU, shared with another site.
 
-1. In your hosting panel, create a subdomain such as `time.yourdomain.com` and note its document root folder.
-2. Turn on HTTPS for the subdomain (most hosts include a free certificate). **Passkeys only work over HTTPS.** Then uncomment the HTTPS lines in `.htaccess`.
-3. Copy `config.sample.php` to `config.php` and fill in:
-   * `owner_email`: where sign-in codes are sent (e.g. your Gmail address).
-   * `mail`: how to send email. Your host's `mail()` usually works. If codes land in spam or don't arrive, use Gmail's SMTP with an App Password; the steps are in the file.
-   * `data_dir` (recommended): a folder **outside** the subdomain's document root, e.g. `/home/youraccount/timetracker-data`.
-4. Upload the **contents** of this `timetracker` folder, including your `config.php`, into the document root. Make sure the data folder is writable by PHP. It usually is; if not, set it to 755 or 775.
-5. Visit `https://time.yourdomain.com/`, click **Email me a setup code**, enter the code and choose a password. You're then taken to Settings: click **Add a passkey**. Add one on each computer or phone you use, or keep passkeys in a password manager or iCloud/Google so they sync.
+**Before you start**
+1. Create a DNS record (A, and AAAA if you use IPv6) for the subdomain, e.g. `time.yourdomain.com`, pointing at the server.
+2. In Brevo, have either an **API key** (SMTP & API → API keys) or your **SMTP login and SMTP key** (SMTP & API → SMTP). You also need a **verified sender** address, e.g. `noreply@yourdomain.com`.
 
-The bundled `.htaccess` files block web access to `config.php`, `data/` and `lib/`.
+**Install** (as a user with sudo, from the downloaded `timetracker` folder):
 
-*nginx:* add `location ~ ^/(data|lib)/ { deny all; }` and `location ~ ^/(config|router)\.php$ { deny all; }` to the server block.
+```bash
+sudo ./deploy/install-almalinux.sh --domain time.yourdomain.com --cert-email you@yourdomain.com
+```
+
+The script asks for your sign-in email address and your Brevo details, then:
+* installs nginx, PHP-FPM and PHP's SQLite driver if they're missing;
+* copies the app to `/var/www/timetracker` and keeps the database in `/var/lib/timetracker`, outside the web root;
+* writes `config.php`, readable only by the app;
+* adds **one** nginx site, for just the subdomain, and one PHP-FPM pool. Your existing site isn't changed;
+* gets a free Let's Encrypt certificate for the subdomain, which renews automatically;
+* sets up SELinux so PHP can write the database and reach Brevo, and opens HTTP/HTTPS in firewalld.
+
+Then open `https://time.yourdomain.com/`:
+1. Click **Email me a setup code**, enter the code and choose a password.
+2. In Settings, **Add a passkey** and fill in **Your details**.
+3. Use **Email delivery → Send a test email** to check Brevo is working.
+
+**Updating:** download the new version and run the same command again. Your `config.php` and data are kept.
+**Changing Brevo details:** `sudo nano /var/www/timetracker/config.php`. Changes apply immediately.
+
+**Memory and CPU use**
+* There is no database server: SQLite is just a file. There are no background jobs.
+* PHP runs "on demand": **no PHP processes exist while you're not using the app**. A page load starts one (about 20 MB), and it exits after 10 idle seconds. At most 2 run at once, each limited to 64 MB.
+* Reports, exports and invoices read your entries one at a time, so memory stays flat as your history grows. Tested with 25,000 entries, about ten years of use: an all-time report peaks at about 4 MB, and the CSV and printable reports at about 2 MB.
+* nginx serves the CSS and JavaScript directly, and browsers cache them.
+* If PHP-FPM wasn't already in use on the server, the installer also switches its default `www` pool to on-demand, so it doesn't keep 5 idle processes around.
+
+**Security notes:** nginx only runs the app's own PHP pages. `config.php`, the `lib/` code and anything else private return 404. PHP is confined to the app and data folders.
+
+## Option A2 — shared web hosting (Apache/LiteSpeed)
+
+1. Create the subdomain in your hosting panel and turn on HTTPS. **Passkeys only work over HTTPS.**
+2. Copy `config.sample.php` to `config.php`. Set `owner_email`, your Brevo details and a `data_dir` outside the web root.
+3. Upload the contents of the `timetracker` folder, plus your `config.php`. The bundled `.htaccess` files block private files.
+4. Visit the site, click **Email me a setup code**, choose a password, then add a passkey in Settings.
 
 ## Option B — from a shared drive (no web hosting)
 
@@ -51,7 +81,7 @@ The server only listens on the local computer. The database uses SQLite's standa
 
 ## Everyday tips
 
-* **First steps:** open *Settings* and enter your business details, bank details, default hourly and day rates, VAT and invoice numbering. For each client, choose *Bill by: Hourly / Half days / Full days*. For half-day and day clients, the client's rate is their **day rate**. Then add clients and projects under *Clients & projects*. You can also create a project straight from any project picker ("＋ New project…").
+* **First steps:** open *Settings*. Fill in **Your details**: full name, company name, contact email (printed on invoices; separate from your private sign-in address), address, VAT number. Then enter your bank details, default hourly and day rates, VAT and invoice numbering. For each client, choose *Bill by: Hourly / Half days / Full days*. For half-day and day clients, the client's rate is their **day rate**. Then add clients and projects under *Clients & projects*. You can also create a project straight from any project picker ("＋ New project…").
 * **Weekly timesheet for a client:** *Reports* → choose the client and *Last week* → *🖨 Timesheet*. Add the sign-off box and amounts there if you need them.
 * **Monthly invoice:** *Invoices* → choose the client (or *All clients*) and *Last month* → check the preview → *Create invoice*. The invoice opens in a new tab ready to save as PDF.
 * **Back up** now and then from *Settings → Backup & export*. The backup is a normal SQLite file that you can also open with tools like *DB Browser for SQLite*.
@@ -68,7 +98,8 @@ login.php        sign-in page
 invoice.php      printable invoice
 report.php       printable timesheets & reports, CSV export
 backup.php       database download
-config.php       your settings: email, mail server, data folder (you create it; never committed)
+config.php       private settings: sign-in email, Brevo/mail details, data folder (never committed)
+deploy/          AlmaLinux + nginx installer, nginx site and PHP-FPM pool
 lib/             shared PHP code: passkeys, email, billing (not web-accessible)
 data/            your database and session files (not web-accessible, not in git)
 assets/          CSS and JavaScript

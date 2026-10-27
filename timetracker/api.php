@@ -61,6 +61,8 @@ $actions = [
     'invoices.delete' => 'api_invoices_delete',
     'settings.save' => 'api_settings_save',
     'password.change' => 'api_password_change',
+    'mail.status' => fn($in) => mail_status(),
+    'mail.test' => 'api_mail_test',
     'passkeys.list' => 'api_passkeys_list',
     'passkeys.options' => fn($in) => passkey_registration_options(),
     'passkeys.register' => 'api_passkeys_register',
@@ -708,8 +710,7 @@ function api_delete_record(string $table, array $in): array
 
 function api_report_summary(array $in): array
 {
-    $entries = fetch_entries($in);
-    return ['summary' => summarise($entries)];
+    return ['summary' => summarise(iterate_entries($in))];
 }
 
 // ---------------------------------------------------------------------------
@@ -951,4 +952,26 @@ function api_passkeys_delete(array $in): array
 {
     db()->prepare('DELETE FROM passkeys WHERE id = ?')->execute([(int) ($in['id'] ?? 0)]);
     return ['deleted' => 1];
+}
+
+// ---------------------------------------------------------------------------
+// Email delivery
+
+function api_mail_test(array $in): array
+{
+    $wait = 30 - (time() - (int) setting('code_sent_at'));
+    if ($wait > 0) {
+        throw new UserError("Please wait $wait seconds before sending another email.");
+    }
+    set_setting('code_sent_at', (string) time());
+    try {
+        send_owner_mail('Test email from ' . APP_NAME, "This is a test email from " . APP_NAME . " (" . date('H:i, j M Y') . ").\n\n"
+            . "If you can read this, sign-in codes will reach you.\n");
+    } catch (UserError $e) {
+        throw $e;
+    } catch (Throwable $e) {
+        // You are signed in, so the real reason is safe to show.
+        throw new UserError('Sending failed: ' . $e->getMessage());
+    }
+    return ['sent' => true];
 }

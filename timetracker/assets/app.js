@@ -1474,48 +1474,76 @@ function addPasskey(onDone) {
     });
 }
 
+// A settings card with its own Save button; saves only its own fields.
+function settingsCard(title, intro, defs) {
+    const f = formFields(defs, S.settings);
+    return el('section', { class: 'card' }, el('h2', {}, title), intro ? el('p', { class: 'muted' }, intro) : null, f,
+        el('div', { class: 'modal-actions' }, el('button', { class: 'btn primary', onclick: () => attempt(async () => {
+            const r = await api('settings.save', f.values());
+            S.settings = r.settings;
+            showWho();
+            toast(title + ' saved');
+        }) }, 'Save')));
+}
+
+// Email delivery status (no addresses or keys are ever sent to the browser) and a test button.
+function emailSection() {
+    const box = el('section', { class: 'card' });
+    api('mail.status').then((st) => fill(box,
+        el('h2', {}, 'Email delivery'),
+        el('p', { class: 'muted' }, 'Sign-in codes and security alerts are emailed to your private sign-in address. '
+            + 'The address and mail service details (e.g. your Brevo key) are kept in config.php on the server, never in the app or its backups.'),
+        el('p', {}, 'Sending with: ', el('strong', {}, st.method), ' ',
+            st.configured ? el('span', { class: 'badge ok' }, 'configured') : el('span', { class: 'badge danger' }, 'incomplete — see config.php')),
+        el('div', { class: 'modal-actions' }, el('button', { class: 'btn', onclick: (ev) => attempt(async () => {
+            ev.target.disabled = true;
+            try {
+                await api('mail.test');
+                toast('Test email sent to your sign-in address');
+            } finally { ev.target.disabled = false; }
+        }) }, 'Send a test email')),
+    )).catch((e) => fill(box, el('p', { class: 'error' }, e.message)));
+    return box;
+}
+
 function viewSettings() {
     let zones = [];
     try { zones = Intl.supportedValuesOf('timeZone'); } catch (e) { /* older browser */ }
-    const f = formFields([
-        { heading: 'Your business (shown on invoices and timesheets)' },
-        { name: 'business_name', label: 'Business / trading name' },
-        { name: 'your_name', label: 'Your name' },
-        { name: 'email', label: 'Email', type: 'email' },
-        { name: 'phone', label: 'Phone' },
-        { name: 'website', label: 'Website' },
-        { name: 'address', label: 'Address', type: 'textarea' },
-        { name: 'tax_number', label: 'VAT / tax registration number' },
-        { name: 'company_number', label: 'Company number' },
-        { heading: 'Rates & invoicing' },
-        { name: 'currency_code', label: 'Currency code', placeholder: 'GBP, EUR, USD…' },
-        { name: 'currency_symbol', label: 'Currency symbol' },
-        { name: 'default_rate', label: 'Default hourly rate', type: 'number', step: '0.01', hint: 'Used when a client, project or task has no rate.' },
-        { name: 'default_day_rate', label: 'Default day rate', type: 'number', step: '0.01', hint: 'For clients billed by the day or half day.' },
-        { name: 'day_hours', label: 'Working day (hours)', type: 'number', step: '0.25', hint: 'Can be changed per client.' },
-        { name: 'payment_terms', label: 'Payment terms (days)', type: 'number' },
-        { name: 'tax_label', label: 'Tax name', placeholder: 'VAT' },
-        { name: 'tax_rate', label: 'Default tax rate %', type: 'number', step: '0.01', hint: 'Use 0 if you are not registered.' },
-        { name: 'invoice_prefix', label: 'Invoice number prefix', hint: 'You can use {YYYY}, {YY} and {MM}.' },
-        { name: 'invoice_next', label: 'Next invoice number', type: 'number', min: 1 },
-        { name: 'invoice_digits', label: 'Pad numbers to digits', type: 'number', min: 1 },
-        { name: 'bank_details', label: 'Payment / bank details', type: 'textarea', placeholder: 'Account name, sort code, account number…' },
-        { name: 'invoice_footer', label: 'Invoice footer', type: 'textarea', rows: 2 },
-        { name: 'umbrella_bill_to', label: 'Bill-to for “all clients” invoices (e.g. your umbrella company)', type: 'textarea' },
-        { heading: 'Preferences' },
-        { name: 'date_format', label: 'Date format', type: 'select', options: [['d/m/Y', '31/12/2026'], ['m/d/Y', '12/31/2026'], ['Y-m-d', '2026-12-31'], ['d.m.Y', '31.12.2026']] },
-        { name: 'week_start', label: 'Week starts on', type: 'select', options: [['1', 'Monday'], ['7', 'Sunday'], ['6', 'Saturday']] },
-        { name: 'timezone', label: 'Time zone', list: 'tz-list', hint: 'Used for the timer.' },
-    ], S.settings);
     const cur = el('input', { type: 'password', autocomplete: 'current-password' });
     const nw = el('input', { type: 'password', autocomplete: 'new-password' });
     setView(el('div', { class: 'settings' },
-        el('section', { class: 'card' }, el('h2', {}, 'Settings'), f, el('datalist', { id: 'tz-list' }, zones.map((z) => el('option', { value: z }))),
-            el('div', { class: 'modal-actions' }, el('button', { class: 'btn primary', onclick: () => attempt(async () => {
-                const r = await api('settings.save', f.values());
-                S.settings = r.settings;
-                toast('Settings saved');
-            }) }, 'Save settings'))),
+        settingsCard('Your details', 'Shown on your invoices and timesheets.', [
+            { name: 'your_name', label: 'Full name' },
+            { name: 'business_name', label: 'Company name' },
+            { name: 'email', label: 'Contact email', type: 'email', hint: 'Printed on invoices for clients. Not used for signing in.' },
+            { name: 'phone', label: 'Phone' },
+            { name: 'address', label: 'Address', type: 'textarea' },
+            { name: 'website', label: 'Website' },
+            { name: 'tax_number', label: 'VAT / tax registration number' },
+            { name: 'company_number', label: 'Company number' },
+        ]),
+        settingsCard('Rates & invoicing', null, [
+            { name: 'currency_code', label: 'Currency code', placeholder: 'GBP, EUR, USD…' },
+            { name: 'currency_symbol', label: 'Currency symbol' },
+            { name: 'default_rate', label: 'Default hourly rate', type: 'number', step: '0.01', hint: 'Used when a client, project or task has no rate.' },
+            { name: 'default_day_rate', label: 'Default day rate', type: 'number', step: '0.01', hint: 'For clients billed by the day or half day.' },
+            { name: 'day_hours', label: 'Working day (hours)', type: 'number', step: '0.25', hint: 'Can be changed per client.' },
+            { name: 'payment_terms', label: 'Payment terms (days)', type: 'number' },
+            { name: 'tax_label', label: 'Tax name', placeholder: 'VAT' },
+            { name: 'tax_rate', label: 'Default tax rate %', type: 'number', step: '0.01', hint: 'Use 0 if you are not registered.' },
+            { name: 'invoice_prefix', label: 'Invoice number prefix', hint: 'You can use {YYYY}, {YY} and {MM}.' },
+            { name: 'invoice_next', label: 'Next invoice number', type: 'number', min: 1 },
+            { name: 'invoice_digits', label: 'Pad numbers to digits', type: 'number', min: 1 },
+            { name: 'bank_details', label: 'Payment / bank details', type: 'textarea', placeholder: 'Account name, sort code, account number…' },
+            { name: 'invoice_footer', label: 'Invoice footer', type: 'textarea', rows: 2 },
+            { name: 'umbrella_bill_to', label: 'Bill-to for “all clients” invoices (e.g. your umbrella company)', type: 'textarea' },
+        ]),
+        settingsCard('Preferences', null, [
+            { name: 'date_format', label: 'Date format', type: 'select', options: [['d/m/Y', '31/12/2026'], ['m/d/Y', '12/31/2026'], ['Y-m-d', '2026-12-31'], ['d.m.Y', '31.12.2026']] },
+            { name: 'week_start', label: 'Week starts on', type: 'select', options: [['1', 'Monday'], ['7', 'Sunday'], ['6', 'Saturday']] },
+            { name: 'timezone', label: 'Time zone', list: 'tz-list', hint: 'Used for the timer.' },
+        ]),
+        el('datalist', { id: 'tz-list' }, zones.map((z) => el('option', { value: z }))),
         securitySection(),
         el('section', { class: 'card' }, el('h2', {}, 'Password'),
             el('p', { class: 'muted' }, 'Your password is only used for the backup sign-in, together with a code sent to your email.'),
@@ -1525,12 +1553,19 @@ function viewSettings() {
                 cur.value = ''; nw.value = '';
                 toast('Password changed');
             }) }, 'Change password'))),
+        emailSection(),
         el('section', { class: 'card' }, el('h2', {}, 'Backup & export'),
             el('p', {}, 'Everything is stored in one small SQLite file. Download a copy now and then.'),
             el('div', { class: 'toolbar' },
                 el('a', { class: 'btn', href: 'backup.php?t=' + encodeURIComponent(S.csrf) }, '⬇ Download database backup'),
                 el('a', { class: 'btn', href: 'report.php?format=csv' }, '⬇ Export all time as CSV'))),
     ));
+}
+
+// Your name (or company) next to "Sign out".
+function showWho() {
+    const who = $('#who');
+    if (who) who.textContent = S.settings.your_name || S.settings.business_name || '';
 }
 
 // ---------------------------------------------------------------------------
@@ -1571,5 +1606,6 @@ document.addEventListener('visibilitychange', () => {
         return;
     }
     tick();
+    showWho();
     route();
 })();

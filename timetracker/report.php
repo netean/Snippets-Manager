@@ -11,7 +11,6 @@ send_security_headers();
 require_login();
 
 $f = array_intersect_key($_GET, array_flip(['from', 'to', 'client_id', 'project_id', 'task_id', 'category_id', 'billable', 'invoiced', 'q']));
-$entries = fetch_entries($f);
 $set = settings();
 
 if (($_GET['format'] ?? '') === 'csv') {
@@ -22,7 +21,7 @@ if (($_GET['format'] ?? '') === 'csv') {
     $out = fopen('php://output', 'w');
     fwrite($out, "\xEF\xBB\xBF"); // so Excel reads UTF-8 correctly
     fputcsv($out, ['Date', 'Start', 'End', 'Hours', 'Duration', 'Client', 'Project', 'Task', 'Categories', 'Description', 'Billable', 'Rate', 'Amount', 'Invoice']);
-    foreach ($entries as $e) {
+    foreach (iterate_entries($f) as $e) {
         fputcsv($out, [$e['date'], $e['start_time'], $e['end_time'], fmt_hours($e['minutes']), fmt_hm($e['minutes']), $e['client_name'],
             $e['project_name'], $e['task_name'], implode('; ', array_map(fn($c) => $catNames[$c] ?? '', $e['category_ids'])),
             $e['description'], $e['billable'] ? 'Yes' : 'No', $e['eff_rate'], $e['billable'] ? number_format($e['amount'], 2, '.', '') : '',
@@ -34,7 +33,10 @@ if (($_GET['format'] ?? '') === 'csv') {
 $type = ($_GET['type'] ?? 'timesheet') === 'summary' ? 'summary' : 'timesheet';
 $showAmounts = !empty($_GET['amounts']);
 $signoff = !empty($_GET['signoff']);
-$sum = summarise($entries);
+// One pass for the totals; the detailed table below reads the entries again, row by row.
+$sum = summarise(iterate_entries($f));
+$entries = iterate_entries($f);
+$multiClient = count($sum['clients']) > 1;
 
 $clientName = '';
 $clientAddress = '';

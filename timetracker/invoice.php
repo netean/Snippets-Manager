@@ -20,7 +20,8 @@ $s = db()->prepare('SELECT * FROM invoice_lines WHERE invoice_id = ? ORDER BY so
 $s->execute([$id]);
 $lines = $s->fetchAll();
 $withTimesheet = !empty($_GET['timesheet']);
-$entries = $withTimesheet ? fetch_entries(['invoice_id' => $id]) : [];
+$entries = $withTimesheet ? iterate_entries(['invoice_id' => $id]) : [];
+$multiClient = $inv['client_id'] === null;
 $set = settings();
 
 $billTo = $inv['bill_to'];
