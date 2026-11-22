@@ -1,8 +1,11 @@
 #include "mainwindow.h"
 #include "database.h"
 #include "settingsdialog.h"
+#include "messagebox.h"
 #include <QApplication>
 #include <QClipboard>
+#include <QCloseEvent>
+#include <QMimeData>
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QStatusBar>
@@ -45,7 +48,7 @@ MainWindow::MainWindow(QWidget *parent)
     // Connect signals
     connect(m_snippetList->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &MainWindow::onSelectionChanged);
-    connect(m_searchEdit, &QLineEdit::textChanged, [this]() { m_searchTimer->start(); });
+    connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { m_searchTimer->start(); });
     connect(m_sortCombo, &QComboBox::currentIndexChanged, this, &MainWindow::onSortOrderChanged);
     connect(m_addButton, &QPushButton::clicked, this, &MainWindow::onAddSnippet);
     connect(m_editButton, &QPushButton::clicked, this, &MainWindow::onEditSnippet);
@@ -53,7 +56,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_saveButton, &QPushButton::clicked, this, &MainWindow::onSaveSnippet);
     connect(m_copyButton, &QPushButton::clicked, this, &MainWindow::onCopySnippet);
     connect(m_titleEdit, &QLineEdit::textChanged, this, &MainWindow::onTitleChanged);
-    connect(m_titleEdit, &QLineEdit::returnPressed, this, &MainWindow::saveCurrentSnippet);
+    connect(m_titleEdit, &QLineEdit::returnPressed, this, &MainWindow::ensureSaved);
     connect(m_contentEdit, &QTextEdit::textChanged, this, &MainWindow::onContentChanged);
 
     // Clicking in the content area copies it to the clipboard
@@ -199,22 +202,53 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
     // copies it. If the user dragged to select part of the text, only the
     // selection is copied. Clicks while editing are left alone so the
     // clipboard isn't overwritten before the user can paste into the snippet.
+    // This can be turned off in the settings.
     if (watched == m_contentEdit->viewport() && event->type() == QEvent::MouseButtonRelease) {
         QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
-        if (mouseEvent->button() == Qt::LeftButton && m_currentSnippetId != -1 && !isContentEditable()) {
+        if (mouseEvent->button() == Qt::LeftButton && m_currentSnippetId != -1 && !isContentEditable()
+            && copyOnSelect()) {
             QString selected = m_contentEdit->textCursor().selectedText();
             if (!selected.isEmpty()) {
                 // QTextCursor uses the Unicode paragraph separator for line breaks
                 selected.replace(QChar::ParagraphSeparator, '\n');
-                QApplication::clipboard()->setText(selected);
+                copyToClipboard(selected);
                 statusBar()->showMessage("Selected text copied to clipboard", 2000);
             } else if (!m_contentEdit->toPlainText().isEmpty()) {
-                QApplication::clipboard()->setText(m_contentEdit->toPlainText());
+                copyToClipboard(m_contentEdit->toPlainText());
                 statusBar()->showMessage("Content copied to clipboard", 2000);
             }
         }
     }
     return QMainWindow::eventFilter(watched, event);
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    if (!ensureSaved()) {
+        if (!MessageBox::question(this, "Quit", "Quit anyway and lose the unsaved changes?")) {
+            event->ignore();
+            return;
+        }
+        m_isModified = false;
+    }
+    event->accept();
+}
+
+bool MainWindow::copyOnSelect() const
+{
+    return QSettings().value(SettingsKeys::CopyOnSelect, true).toBool();
+}
+
+void MainWindow::copyToClipboard(const QString &text)
+{
+    auto *mimeData = new QMimeData;
+    mimeData->setText(text);
+    if (QSettings().value(SettingsKeys::HideFromHistory, false).toBool()) {
+        // Tells clipboard managers that follow this convention (such as KDE's
+        // Klipper) not to store the text in their history
+        mimeData->setData("x-kde-passwordManagerHint", "secret");
+    }
+    QApplication::clipboard()->setMimeData(mimeData);
 }
 
 void MainWindow::setContentEditable(bool editable)
@@ -229,8 +263,10 @@ void MainWindow::setContentEditable(bool editable)
         m_modeLabel->setText("Select a snippet to view");
     } else if (editable) {
         m_modeLabel->setText("Editing snippet - Make changes and click 'Save'");
-    } else {
+    } else if (copyOnSelect()) {
         m_modeLabel->setText("Viewing snippet - Click the content to copy it");
+    } else {
+        m_modeLabel->setText("Viewing snippet - Click 'Copy' to copy it");
     }
 }
 
@@ -275,15 +311,23 @@ void MainWindow::onSelectionChanged(const QModelIndex &current)
 
     int newId = current.isValid() ? m_model->data(current, SnippetModel::IdRole).toInt() : -1;
 
+    if (!ensureSaved()) {
+        // Stay on the snippet with unsaved changes rather than throwing them away
+        selectSnippet(m_currentSnippetId);
+        return;
+    }
+
     // Saving refreshes the model, which would lose the new selection, so restore it afterwards
-    saveCurrentSnippet();
     selectSnippet(newId);
     loadSnippet(newId);
 
     if (m_currentSnippetId != -1) {
-        // Automatically copy content to clipboard when selecting a snippet
-        QApplication::clipboard()->setText(m_contentEdit->toPlainText());
-        statusBar()->showMessage("Content copied to clipboard - Rename using the title field, click 'Edit' to change the content", 4000);
+        if (copyOnSelect()) {
+            copyToClipboard(m_contentEdit->toPlainText());
+            statusBar()->showMessage("Content copied to clipboard - Rename using the title field, click 'Edit' to change the content", 4000);
+        } else {
+            statusBar()->showMessage("Rename using the title field, click 'Edit' to change the content", 4000);
+        }
     } else {
         statusBar()->showMessage("Select a snippet to view, or click 'Add' to create a new one");
     }
@@ -308,7 +352,7 @@ void MainWindow::onSortOrderChanged()
 
 void MainWindow::onAddSnippet()
 {
-    saveCurrentSnippet();
+    if (!ensureSaved()) return;
 
     // Clear any search so the new snippet is visible in the list
     if (!m_searchEdit->text().isEmpty()) {
@@ -321,7 +365,7 @@ void MainWindow::onAddSnippet()
     
     int id = Database::instance().addSnippet("New Snippet", "");
     if (id == -1) {
-        QMessageBox::warning(this, "Add Snippet", "The snippet could not be added.");
+        MessageBox::warning(this, "Add Snippet", "The snippet could not be added.");
         return;
     }
 
@@ -344,8 +388,9 @@ void MainWindow::onEditSnippet()
 
 void MainWindow::onSaveSnippet()
 {
-    saveCurrentSnippet();
-    setContentEditable(false);
+    if (ensureSaved()) {
+        setContentEditable(false);
+    }
     updateButtonStates();
 }
 
@@ -354,24 +399,25 @@ void MainWindow::onDeleteSnippet()
     if (m_currentSnippetId == -1) return;
 
     QString title = m_titleEdit->text().trimmed();
-    int ret = QMessageBox::question(this, "Delete Snippet",
-                                   QString("Are you sure you want to delete '%1'?").arg(title),
-                                   QMessageBox::Yes | QMessageBox::No);
-    
-    if (ret == QMessageBox::Yes) {
-        if (Database::instance().deleteSnippet(m_currentSnippetId)) {
-            m_isModified = false;
-            m_model->refresh();
-            selectSnippet(-1);
-            loadSnippet(-1);
-        }
+    if (!MessageBox::question(this, "Delete Snippet",
+                              QString("Are you sure you want to delete '%1'?").arg(title))) {
+        return;
     }
+
+    QString error;
+    if (!Database::instance().deleteSnippet(m_currentSnippetId, &error)) {
+        MessageBox::warning(this, "Delete Snippet", "The snippet could not be deleted.\n\n" + error);
+        return;
+    }
+    m_isModified = false;
+    m_model->refresh();
+    selectSnippet(-1);
+    loadSnippet(-1);
 }
 
 void MainWindow::onCopySnippet()
 {
-    QClipboard *clipboard = QApplication::clipboard();
-    clipboard->setText(m_contentEdit->toPlainText());
+    copyToClipboard(m_contentEdit->toPlainText());
     statusBar()->showMessage("Content copied to clipboard", 2000);
 }
 
@@ -390,7 +436,10 @@ void MainWindow::onContentChanged()
 void MainWindow::onShowSettings()
 {
     SettingsDialog dialog(this);
-    connect(&dialog, &SettingsDialog::aboutToChangeDatabase, this, &MainWindow::saveCurrentSnippet);
+    dialog.setSavePendingChanges([this]() { return ensureSaved(); });
+    connect(&dialog, &SettingsDialog::clipboardSettingsChanged, this, [this]() {
+        setContentEditable(isContentEditable()); // refreshes the hint above the content
+    });
     connect(&dialog, &SettingsDialog::databaseChanged, this, &MainWindow::onDatabaseChanged);
     dialog.exec();
 }
@@ -415,22 +464,44 @@ void MainWindow::updateButtonStates()
     m_copyButton->setEnabled(hasContent);
 }
 
-void MainWindow::saveCurrentSnippet()
+bool MainWindow::saveCurrentSnippet(QString *errorMessage)
 {
-    if (m_isModified && m_currentSnippetId != -1) {
-        QString title = m_titleEdit->text().trimmed();
-        QString content = m_contentEdit->toPlainText();
-        
-        if (title.isEmpty()) {
-            title = "Untitled";
-        }
-        
-        if (Database::instance().updateSnippet(m_currentSnippetId, title, content)) {
-            m_isModified = false;
-            m_model->refresh();
-            selectSnippet(m_currentSnippetId);
-            updateButtonStates();
-            statusBar()->showMessage("Snippet saved successfully", 2000);
-        }
+    if (!m_isModified || m_currentSnippetId == -1) {
+        return true;
     }
+
+    QString title = m_titleEdit->text().trimmed();
+    QString content = m_contentEdit->toPlainText();
+
+    if (title.isEmpty()) {
+        title = "Untitled";
+    }
+
+    if (!Database::instance().updateSnippet(m_currentSnippetId, title, content, errorMessage)) {
+        statusBar()->showMessage("The snippet could not be saved");
+        return false;
+    }
+
+    m_isModified = false;
+    m_model->refresh();
+    selectSnippet(m_currentSnippetId);
+    updateButtonStates();
+    statusBar()->showMessage("Snippet saved successfully", 2000);
+    return true;
+}
+
+bool MainWindow::ensureSaved()
+{
+    QString error;
+    if (saveCurrentSnippet(&error)) {
+        return true;
+    }
+
+    QString title = m_titleEdit->text().trimmed();
+    MessageBox::warning(this, "Save Snippet",
+                        QString("Your changes to '%1' could not be saved.\n\n%2\n\n"
+                                "They are still in the editor. Check that the database location in "
+                                "File > Settings... is available and writable, then try saving again.")
+                            .arg(title.isEmpty() ? "Untitled" : title, error));
+    return false;
 }

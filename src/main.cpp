@@ -6,6 +6,7 @@
 #include <QDebug>
 #include "mainwindow.h"
 #include "database.h"
+#include "messagebox.h"
 
 int main(int argc, char *argv[])
 {
@@ -49,10 +50,19 @@ int main(int argc, char *argv[])
     }
     
     // Initialize database
-    Database::instance().initialize();
-    
+    QString dbError, dbWarning;
+    if (!Database::instance().initialize(&dbError, &dbWarning)) {
+        MessageBox::critical(nullptr, "Snippet Manager",
+                             "The snippets database could not be opened, so Snippet Manager can't start.\n\n" + dbError);
+        return 1;
+    }
+
     MainWindow window;
     window.show();
+
+    if (!dbWarning.isEmpty()) {
+        MessageBox::warning(&window, "Snippet Manager", dbWarning);
+    }
     
     return app.exec();
 }

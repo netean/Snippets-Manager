@@ -1,6 +1,6 @@
 # Snippet Manager
 
-**Current version: 1.2** — see [CHANGELOG.md](CHANGELOG.md) for what's new.
+**Current version: 1.3** — see [CHANGELOG.md](CHANGELOG.md) for what's new.
 
 A very simple, very basic, KDE desktop application for storing and managing text snippets, code snippets, and short phrases with full Unicode support.
 
@@ -43,8 +43,8 @@ Run `./install.sh --help` for all options. Uninstalling never touches your snipp
 
 ```bash
 ./package-appimage.sh
-chmod +x SnippetManager-1.2-x86_64.AppImage
-./SnippetManager-1.2-x86_64.AppImage
+chmod +x SnippetManager-1.3-x86_64.AppImage
+./SnippetManager-1.3-x86_64.AppImage
 ```
 
 The AppImage needs a glibc at least as new as the machine that built it, so build it on the oldest distro you want to support. Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the distro); without it, run it with `--appimage-extract-and-run`.
@@ -82,9 +82,9 @@ Or just download the binary release from the releases page.
 3. **Editing Content**: Select a snippet, click "Edit", make changes and click "Save"
 4. **Searching**: Type in the search box to filter snippets
 5. **Sorting**: Use the "Sort" drop-down to order snippets by title (A-Z / Z-A) or by date created (oldest / newest first)
-6. **Copying**: Selecting a snippet copies its content to the clipboard. Clicking anywhere in the content area copies it again (drag to select part of the text to copy just that part)
+6. **Copying**: Selecting a snippet copies its content to the clipboard. Clicking anywhere in the content area copies it again (drag to select part of the text to copy just that part). You can turn this off in File > Settings..., so snippets are only copied with the "Copy" button
 7. **Deleting**: Select a snippet and click "Delete" (with confirmation)
-8. **Settings**: File > Settings... shows where the database is stored and lets you move it, open a different database, or create a new one
+8. **Settings**: File > Settings... shows where the database is stored and lets you move it, open a different database, or create a new one. It also has the clipboard options: copying on select, and keeping copied snippets out of clipboard history (for clipboard managers that support it, such as KDE's Klipper)
 
 ## Data Storage
 
@@ -92,6 +92,8 @@ By default, snippets are stored in a SQLite database located at:
 `~/.local/share/SnippetManager/Snippet Manager/snippets.db`
 
 You can move it, or switch to another database file, from File > Settings.... The chosen location is remembered between runs.
+
+The database file is only readable by your user account, because snippets often hold things like tokens and passwords. Snippet Manager won't open, or write to, a SQLite file that isn't a snippets database.
 
 Change the location in the settings
 
