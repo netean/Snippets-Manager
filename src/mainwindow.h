@@ -2,17 +2,17 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
-#include <QListView>
-#include <QTextEdit>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QComboBox>
-#include <QSplitter>
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QTimer>
 #include "snippetmodel.h"
+
+class QAction;
+class QComboBox;
+class QLabel;
+class QLineEdit;
+class QListView;
+class QPushButton;
+class QSplitter;
+class QTimer;
+class SnippetEditor;
 
 class MainWindow : public QMainWindow
 {
@@ -30,68 +30,65 @@ private slots:
     void onSelectionChanged(const QModelIndex &current);
     void onSearchTextChanged();
     void onSortOrderChanged();
+    void onTagFilterChanged();
     void onAddSnippet();
     void onEditSnippet();
     void onSaveSnippet();
     void onDeleteSnippet();
     void onCopySnippet();
-    void onTitleChanged();
-    void onContentChanged();
+    void onEditorChanged();
     void onShowSettings();
     void onDatabaseChanged();
-    void onAbout();
     void onShowDetails();
+    void onAbout();
 
 private:
     void setupUI();
     void setupActions();
     void setupMenus();
     void updateButtonStates();
+    void updateModeLabel();
+    // Repopulates the tag filter and the tag suggestions, keeping the selection
+    void refreshTags();
     // Saves pending edits; returns true if there was nothing to save or the save worked
     bool saveCurrentSnippet(QString *errorMessage = nullptr);
     // Like saveCurrentSnippet, but tells the user if the save failed
     bool ensureSaved();
-    void copyToClipboard(const QString &text);
-    bool copyOnSelect() const;
     void loadSnippet(int id);
     void selectSnippet(int id);
     void setContentEditable(bool editable);
-    bool isContentEditable() const;
-    
-    QWidget *m_centralWidget;
-    QSplitter *m_splitter;
-    
-    // Left panel
-    QWidget *m_leftPanel;
-    QLineEdit *m_searchEdit;
-    QComboBox *m_sortCombo;
-    QListView *m_snippetList;
-    QPushButton *m_addButton;
-    QPushButton *m_editButton;
-    QPushButton *m_deleteButton;
-    
-    // Right panel
-    QWidget *m_rightPanel;
-    QLabel *m_modeLabel;
-    QLineEdit *m_titleEdit;
-    QTextEdit *m_contentEdit;
-    QPushButton *m_saveButton;
-    QPushButton *m_copyButton;
-    
-    QAction *m_newAction;
-    QAction *m_saveAction;
-    QAction *m_editAction;
-    QAction *m_copyAction;
-    QAction *m_deleteAction;
-    QAction *m_findAction;
-    QAction *m_detailsAction;
+    void copyToClipboard(const QString &text);
+    bool copyOnSelect() const;
+    int currentId() const;
 
-    SnippetModel *m_model;
-    int m_currentSnippetId;
-    Snippet m_current;
-    bool m_isModified;
-    bool m_updatingSelection;
-    QTimer *m_searchTimer;
+    QSplitter *m_splitter = nullptr;
+
+    // Left panel
+    QLineEdit *m_searchEdit = nullptr;
+    QComboBox *m_tagFilterCombo = nullptr;
+    QComboBox *m_sortCombo = nullptr;
+    QListView *m_snippetList = nullptr;
+    QPushButton *m_addButton = nullptr;
+    QPushButton *m_editButton = nullptr;
+    QPushButton *m_deleteButton = nullptr;
+
+    // Right panel
+    QLabel *m_modeLabel = nullptr;
+    SnippetEditor *m_editor = nullptr;
+    QPushButton *m_saveButton = nullptr;
+    QPushButton *m_copyButton = nullptr;
+
+    QAction *m_newAction = nullptr;
+    QAction *m_saveAction = nullptr;
+    QAction *m_editAction = nullptr;
+    QAction *m_copyAction = nullptr;
+    QAction *m_deleteAction = nullptr;
+    QAction *m_findAction = nullptr;
+    QAction *m_detailsAction = nullptr;
+
+    SnippetModel *m_model = nullptr;
+    bool m_updatingSelection = false;
+    QTimer *m_searchTimer = nullptr;
 };
 
 #endif // MAINWINDOW_H

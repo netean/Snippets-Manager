@@ -60,6 +60,13 @@ void SnippetModel::search(const QString &searchTerm)
     refresh();
 }
 
+void SnippetModel::setTagFilter(const QString &tag, bool untagged)
+{
+    m_filter.tag = tag;
+    m_filter.untagged = untagged;
+    refresh();
+}
+
 void SnippetModel::setSortOrder(Database::SortOrder order)
 {
     m_sortOrder = order;

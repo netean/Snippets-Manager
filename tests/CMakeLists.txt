@@ -7,9 +7,10 @@ function(add_snippet_test name)
     target_link_libraries(${name} PRIVATE snippetcore Qt6::Test)
     add_test(NAME ${name} COMMAND ${name})
     set(test_home "${CMAKE_CURRENT_BINARY_DIR}/${name}-home")
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT
+    set_tests_properties(${name} PROPERTIES TIMEOUT 60 ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;HOME=${test_home};XDG_CONFIG_HOME=${test_home}/config;XDG_DATA_HOME=${test_home}/data;XDG_RUNTIME_DIR=${test_home}/runtime")
     file(MAKE_DIRECTORY "${test_home}/runtime")
 endfunction()
 
 add_snippet_test(tst_database)
+add_snippet_test(tst_mainwindow)

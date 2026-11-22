@@ -26,6 +26,8 @@ public:
     void refresh();
     void search(const QString &searchTerm);
     void setSortOrder(Database::SortOrder order);
+    // Only show snippets with this tag (or without tags, if untagged is true)
+    void setTagFilter(const QString &tag, bool untagged);
     Database::SortOrder sortOrder() const;
     Snippet getSnippet(int row) const;
     int rowForId(int id) const;

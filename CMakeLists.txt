@@ -43,6 +43,10 @@ add_library(snippetcore STATIC
     src/messagebox.h
     src/snippetmodel.cpp
     src/snippetmodel.h
+    src/snippeteditor.cpp
+    src/snippeteditor.h
+    src/tagedit.cpp
+    src/tagedit.h
     src/mainwindow.cpp
     src/mainwindow.h
     src/settingsdialog.cpp
