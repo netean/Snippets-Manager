@@ -19,6 +19,12 @@ KSyntaxHighlighting::Repository &repository()
 
 bool highlightingAvailable()
 {
+    // Always: KSyntaxHighlighting when the build has it, else the built-in highlighter
+    return true;
+}
+
+bool usesKSyntaxHighlighting()
+{
 #ifdef HAVE_SYNTAX_HIGHLIGHTING
     return true;
 #else

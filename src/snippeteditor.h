@@ -23,6 +23,7 @@ class SnippetEditor : public QWidget
 
 public:
     explicit SnippetEditor(QWidget *parent = nullptr);
+    ~SnippetEditor() override;
 
     // Shows a snippet (or nothing, for an invalid one) and clears the modified flag
     void setSnippet(const Snippet &snippet);
@@ -124,8 +125,10 @@ private:
     QComboBox *m_styleCombo;
     QActionGroup *m_styleGroup;
 
-    // Colours code snippets (null in builds without KSyntaxHighlighting)
+    // Colours code snippets: KDE's KSyntaxHighlighting when the build has it,
+    // otherwise the built-in CodeHighlighter
     KSyntaxHighlighting::SyntaxHighlighter *m_highlighter = nullptr;
+    class CodeHighlighter *m_builtinHighlighter = nullptr;
 };
 
 #endif // SNIPPETEDITOR_H

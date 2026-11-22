@@ -1,4 +1,5 @@
 #include "snippeteditor.h"
+#include "codehighlighter.h"
 #include "languages.h"
 #include "messagebox.h"
 #include "richtext.h"
@@ -62,6 +63,8 @@ SnippetEditor::SnippetEditor(QWidget *parent)
     m_contentEdit->setAcceptRichText(false);
 #ifdef HAVE_SYNTAX_HIGHLIGHTING
     m_highlighter = new KSyntaxHighlighting::SyntaxHighlighter(m_contentEdit->document());
+#else
+    m_builtinHighlighter = new CodeHighlighter(this);
 #endif
 
     // Formatting toolbar, shown while editing plain or rich text. Using it on
@@ -174,6 +177,14 @@ SnippetEditor::SnippetEditor(QWidget *parent)
     setSnippet(Snippet());
 }
 
+SnippetEditor::~SnippetEditor()
+{
+    // Removing a highlighter clears its colours, which signals a text change;
+    // stop listening first, while this object is still whole
+    disconnect(m_contentEdit, nullptr, this, nullptr);
+    delete m_builtinHighlighter;
+}
+
 bool SnippetEditor::richTextEnabled() const
 {
     return QSettings().value(SettingsKeys::RichText, true).toBool();
@@ -233,14 +244,24 @@ void SnippetEditor::showContent(const QString &content)
 
 void SnippetEditor::updateHighlighting()
 {
-#ifdef HAVE_SYNTAX_HIGHLIGHTING
     // Re-colouring isn't an edit by the user
     bool wasLoading = m_loading;
     m_loading = true;
     auto restore = qScopeGuard([this, wasLoading]() { m_loading = wasLoading; });
-    bool enabled = QSettings().value(SettingsKeys::SyntaxHighlighting, true).toBool();
+    bool enabled = QSettings().value(SettingsKeys::SyntaxHighlighting, true).toBool()
+                   && !m_formatted && !m_language.isEmpty();
+
+#ifndef HAVE_SYNTAX_HIGHLIGHTING
+    // The built-in highlighter, attached only while it's needed
+    if (!enabled || !CodeHighlighter::supports(m_language)) {
+        if (m_builtinHighlighter->document()) m_builtinHighlighter->setDocument(nullptr);
+        return;
+    }
+    if (!m_builtinHighlighter->document()) m_builtinHighlighter->setDocument(m_contentEdit->document());
+    m_builtinHighlighter->setLanguage(m_language, palette());
+#else
     KSyntaxHighlighting::Definition definition;
-    if (enabled && !m_formatted && !m_language.isEmpty()) {
+    if (enabled) {
         definition = Languages::repository().definitionForName(m_language);
     }
     if (!definition.isValid()) {

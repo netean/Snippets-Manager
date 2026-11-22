@@ -1,11 +1,11 @@
 # Snippet Manager
 
-**Current release: 1.3** — see [CHANGELOG.md](CHANGELOG.md) for what's new. `main` is 2.0, in development.
+**Current release: 2.0** — see [CHANGELOG.md](CHANGELOG.md) for what's new.
 
 ## Versions
 
-- **1.x (stable)**: the simple version. It lives on the [`v1` branch](../../tree/v1) and gets bug and security fixes only. Download it from [Releases](../../releases).
-- **2.0 (in development)**: what this README describes, on `main`. 2.0 upgrades 1.x databases when it first opens them (keeping a backup copy), so you can move up without losing your snippets. Until 2.0 is released, use a release or the `v1` branch if you just want a working app.
+- **2.0 (current)**: what this README describes, on `main`. 2.0 upgrades 1.x databases when it first opens them (keeping a backup copy), so you can move up without losing your snippets. Download it from [Releases](../../releases).
+- **1.x**: the simple version, still available as release 1.3. It lives on the [`v1` branch](../../tree/v1) and gets bug and security fixes only.
 
 A very simple, very basic, KDE desktop application for storing and managing text snippets, code snippets, and short phrases with full Unicode support.
 
@@ -56,7 +56,7 @@ chmod +x SnippetManager-2.0-x86_64.AppImage
 ./SnippetManager-2.0-x86_64.AppImage
 ```
 
-It builds inside an Ubuntu 24.04 container (it needs podman or docker), so the AppImage runs on Ubuntu 24.04 and newer, Debian 13, Fedora 40+ and current rolling distros, whatever you build it on. `./package-appimage.sh --native` builds with your own Qt instead, but the result then only runs on distros at least as new as yours. The AppImage doesn't include syntax highlighting (Ubuntu 24.04 doesn't have the library); builds from source do.
+It builds inside an Ubuntu 24.04 container (it needs podman or docker), so the AppImage runs on Ubuntu 24.04 and newer, Debian 13, Fedora 40+ and current rolling distros, whatever you build it on. `./package-appimage.sh --native` builds with your own Qt instead, but the result then only runs on distros at least as new as yours. The AppImage uses the built-in syntax highlighting (see [Syntax highlighting](#syntax-highlighting)).
 
 Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the distro); without it, run it with `--appimage-extract-and-run`.
 
@@ -69,7 +69,7 @@ Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the
 - CMake 3.19+
 - Qt 6.4+ (Core, Gui, Widgets, Sql with the SQLite driver, Network, and DBus on Linux)
 - C++17 compiler
-- Optional: KDE's KSyntaxHighlighting (KF6) for syntax highlighting
+- Optional: KDE's KSyntaxHighlighting (KF6), for syntax highlighting of over 300 languages instead of the built-in 32
 
 ### Ubuntu/Debian
 ```bash
@@ -117,6 +117,15 @@ Or just download the binary release from the releases page.
     - **Clipboard**: copying on select, keeping copied snippets out of clipboard history (for clipboard managers that support it, such as KDE's Klipper), and placeholders
     - **Quick Access**: the tray icon, starting at login, and the global shortcut
     - **Database**: where the database is stored. Move it, open a different database, or create a new one
+
+### Syntax highlighting
+
+Code snippets are highlighted on every system, in one of two ways:
+
+- **KDE's KSyntaxHighlighting**, when it's installed where Snippet Manager is built (for example with `./install.sh --install-deps` on Fedora, Arch, openSUSE, Debian 13 or Ubuntu 25.04 and newer). It knows over 300 languages and is very accurate.
+- **The built-in highlighter** otherwise. It covers the 32 languages in the Type list (Bash, C, C++, C#, CSS, Go, HTML, Java, JavaScript, JSON, Python, Rust, SQL, TypeScript, YAML and others), colouring keywords, types, strings, comments, numbers, variables and tags, in colours that suit light and dark themes.
+
+Why two? KSyntaxHighlighting is part of KDE Frameworks 6, which isn't available everywhere Snippet Manager runs. Ubuntu 24.04, which the AppImage is built on so that it runs on as many distros as possible, doesn't have it. Nor do standard Qt installs on Windows and macOS, where it would have to be built from source. Rather than leave those versions without highlighting, Snippet Manager has a small highlighter of its own that needs nothing beyond Qt. It's used whenever KSyntaxHighlighting isn't there, so every version highlights code. Settings > Editor shows which one your copy uses, and can turn highlighting off.
 
 ### The global shortcut
 

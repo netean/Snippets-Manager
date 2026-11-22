@@ -27,9 +27,9 @@ if(WITH_SYNTAX_HIGHLIGHTING)
     find_package(KF6SyntaxHighlighting QUIET)
 endif()
 if(KF6SyntaxHighlighting_FOUND)
-    message(STATUS "Syntax highlighting: enabled (KF6SyntaxHighlighting ${KF6SyntaxHighlighting_VERSION})")
+    message(STATUS "Syntax highlighting: KF6SyntaxHighlighting ${KF6SyntaxHighlighting_VERSION}")
 else()
-    message(STATUS "Syntax highlighting: disabled (install KF6SyntaxHighlighting to enable it)")
+    message(STATUS "Syntax highlighting: built-in (install KF6SyntaxHighlighting for 300+ languages)")
 endif()
 
 # D-Bus is used for the global shortcut portal on Linux
@@ -54,6 +54,8 @@ add_library(snippetcore STATIC
     src/clipboard.h
     src/languages.cpp
     src/languages.h
+    src/codehighlighter.cpp
+    src/codehighlighter.h
     src/richtext.cpp
     src/richtext.h
     src/importexport.cpp
