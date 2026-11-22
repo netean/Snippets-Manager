@@ -4,6 +4,28 @@
 
 New features are being built on `main`. Fixes for 1.x go on the `v1` branch.
 
+### New
+- **Folders**: right-click the list to add folders (they can be nested), then drag snippets into them or use Move to Folder. Deleting a folder moves what's in it up a level; snippets are never deleted with it. Exports and imports keep each snippet's folder.
+- **Tags**: add comma-separated tags to snippets (existing tags are suggested), and filter the list by tag.
+- **Snippet types**: plain text, rich text or a programming language.
+- **Rich text editor**: a formatting toolbar above the content and a Format menu: headings, bold, italic, underline, strikethrough, code, links, bulleted, numbered and checklists, indent/outdent and clear formatting. It appears for plain text snippets too, and turns them into rich text when used. Rich text is stored as Markdown (underline as inline HTML), and copied with its formatting. Settings > Editor can turn it off, making everything plain text.
+- **Syntax highlighting** for code snippets, using KDE's KSyntaxHighlighting when it's installed. Can be turned off.
+- **Better search**: results are ranked (title matches first, then tags, then content), and search covers tags.
+- **Trash**: deleting moves a snippet to the trash, Ctrl+Z brings it back, and "Show: Trash" restores snippets or deletes them for good.
+- **Placeholders**: `{{date}}`, `{{time}}`, `{{datetime}}`, `{{clipboard}}` and `{{uuid}}` are filled in when copying.
+- **Import and export**: JSON, Markdown and CSV, including CSV files from other apps.
+- **Quick search**: a popup to find and copy a snippet, from the new tray icon, a global keyboard shortcut (through the desktop's portal) or `snippetmanager --popup`.
+- **Start at login** in the tray.
+- **Keyboard shortcuts**: Ctrl+N, Ctrl+E, Ctrl+S, Ctrl+Shift+C, Ctrl+F, Delete, Ctrl+Z and Alt+Enter.
+- **Snippet details**: created and modified dates, from the right-click menu or Alt+Enter.
+- The window size and layout are remembered.
+
+### Changed
+- 1.x databases are upgraded when 2.0 first opens them, after saving a backup copy. Databases from newer versions are refused rather than changed.
+- The AppImage is built in an Ubuntu 24.04 container with pinned, checksum-verified tools.
+- The menu entry is installed as `io.github.netean.SnippetManager.desktop`, with a Quick Search action.
+- Builds and tests run on GitHub Actions for Linux, Windows and macOS.
+
 ## 1.3
 
 Safety and reliability fixes.

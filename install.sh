@@ -8,6 +8,7 @@
 set -euo pipefail
 
 BINARY="snippetmanager"
+APP_ID="io.github.netean.SnippetManager"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The version comes from project(... VERSION x.y) in CMakeLists.txt
 VERSION="$(sed -n 's/^project(.*VERSION \([0-9][0-9.]*\).*/\1/p' "$SOURCE_DIR/CMakeLists.txt")"
@@ -22,7 +23,8 @@ UNINSTALL=false
 # Files installed by CMakeLists.txt, relative to the prefix. Used for uninstalling.
 INSTALLED_FILES=(
     "bin/$BINARY"
-    "share/applications/$BINARY.desktop"
+    "share/applications/$APP_ID.desktop"
+    "share/applications/$BINARY.desktop"   # name used by 1.x
     "share/icons/hicolor/128x128/apps/$BINARY.png"
     "share/icons/hicolor/64x64/apps/$BINARY.png"
     "share/icons/hicolor/32x32/apps/$BINARY.png"
@@ -136,6 +138,13 @@ fi
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
+# Installs an optional package; carries on without it if the distro doesn't have it
+optional_install() {
+    if ! "$@"; then
+        warn "Optional package not available (${*: -1}); building without syntax highlighting."
+    fi
+}
+
 install_dependencies() {
     local sudo_cmd=""
     [[ $EUID -ne 0 ]] && sudo_cmd="sudo"
@@ -144,15 +153,19 @@ install_dependencies() {
         info "Installing dependencies with apt"
         $sudo_cmd apt-get update
         $sudo_cmd apt-get install -y cmake make g++ qt6-base-dev libqt6sql6-sqlite
+        optional_install $sudo_cmd apt-get install -y libkf6syntaxhighlighting-dev
     elif command -v dnf >/dev/null; then
         info "Installing dependencies with dnf"
         $sudo_cmd dnf install -y cmake make gcc-c++ qt6-qtbase-devel
+        optional_install $sudo_cmd dnf install -y kf6-syntax-highlighting-devel
     elif command -v pacman >/dev/null; then
         info "Installing dependencies with pacman"
         $sudo_cmd pacman -S --needed --noconfirm cmake make gcc qt6-base
+        optional_install $sudo_cmd pacman -S --needed --noconfirm syntax-highlighting
     elif command -v zypper >/dev/null; then
         info "Installing dependencies with zypper"
         $sudo_cmd zypper install -y cmake make gcc-c++ qt6-base-devel qt6-sql-sqlite
+        optional_install $sudo_cmd zypper install -y kf6-syntax-highlighting-devel
     else
         die "Couldn't find a supported package manager. Install CMake, a C++17 compiler and Qt 6 (Core, Widgets, Sql with the SQLite driver) manually."
     fi
@@ -194,7 +207,12 @@ $SUDO cmake --install "$BUILD_DIR" --prefix "$PREFIX" >/dev/null || die "Install
 
 # Point the menu entry at the installed binary, so it launches even when the
 # prefix's bin directory isn't on the desktop session's PATH (common for ~/.local/bin)
-desktop_file="$PREFIX/share/applications/$BINARY.desktop"
+# 1.x installed the menu entry under a different name
+if [[ -f "$PREFIX/share/applications/$BINARY.desktop" ]]; then
+    $SUDO rm -f "$PREFIX/share/applications/$BINARY.desktop"
+fi
+
+desktop_file="$PREFIX/share/applications/$APP_ID.desktop"
 if [[ -f "$desktop_file" ]]; then
     exec_path="$PREFIX/bin/$BINARY"
     # The desktop entry spec needs paths with spaces or special characters quoted,
@@ -206,8 +224,11 @@ if [[ -f "$desktop_file" ]]; then
         escaped="${escaped//\$/\\\\\$}"
         exec_path="\"$escaped\""
     fi
-    # awk reads the value from the environment, so no characters in the path are special
-    EXEC_LINE="Exec=$exec_path" awk '/^Exec=/ { print ENVIRON["EXEC_LINE"]; next } { print }' "$desktop_file" \
+    # awk reads the value from the environment, so no characters in the path are
+    # special. Arguments after the command (e.g. --popup) are kept.
+    EXEC_LINE="Exec=$exec_path" awk '
+        index($0, "Exec=snippetmanager") == 1 { print ENVIRON["EXEC_LINE"] substr($0, 20); next }
+        { print }' "$desktop_file" \
         | $SUDO tee "$desktop_file.tmp" >/dev/null
     $SUDO mv "$desktop_file.tmp" "$desktop_file"
 fi
@@ -215,7 +236,8 @@ fi
 refresh_desktop_caches
 
 # The Qt SQLite driver is a runtime plugin; warn if it looks absent
-if ! find /usr/lib* /usr/local/lib* -path '*sqldrivers*' -name 'libqsqlite*' 2>/dev/null | grep -q .; then
+# (Not "find | grep -q": with pipefail, grep exiting early makes find fail with SIGPIPE)
+if [[ -z "$(find /usr/lib* /usr/local/lib* -path '*sqldrivers*' -name 'libqsqlite*' -print -quit 2>/dev/null)" ]]; then
     warn "The Qt 6 SQLite driver wasn't found. If the app can't open its database, run ./install.sh --install-deps."
 fi
 

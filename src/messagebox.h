@@ -25,6 +25,11 @@ inline void warning(QWidget *parent, const QString &title, const QString &text)
     show(parent, QMessageBox::Warning, title, text, QMessageBox::Ok);
 }
 
+inline void information(QWidget *parent, const QString &title, const QString &text)
+{
+    show(parent, QMessageBox::Information, title, text, QMessageBox::Ok);
+}
+
 inline void critical(QWidget *parent, const QString &title, const QString &text)
 {
     show(parent, QMessageBox::Critical, title, text, QMessageBox::Ok);
