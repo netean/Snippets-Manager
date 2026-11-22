@@ -60,10 +60,22 @@ jobs:
           cmake --build build --config Release --parallel
       - name: Test
         run: ctest --test-dir build -C Release --output-on-failure
+      - name: Show test results
+        if: failure()
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          foreach ($test in Get-ChildItem build/tests -Recurse -Filter "tst_*.exe") {
+            Write-Host "===== $($test.Name)"
+            & $test.FullName -o "$($test.FullName).txt,txt" | Out-Null
+            Write-Host "exit code: $LASTEXITCODE"
+            Get-Content "$($test.FullName).txt" -ErrorAction SilentlyContinue | Select-String -Pattern "FAIL|Loc:|Actual|Expected|QFATAL|QCRITICAL|Totals" | ForEach-Object { Write-Host $_ }
+          }
 
   macos:
     name: macOS (Qt 6.8)
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
