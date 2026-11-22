@@ -15,6 +15,8 @@ inline constexpr char CopyOnSelect[] = "clipboard/copyOnSelect";
 inline constexpr char HideFromHistory[] = "clipboard/hideFromHistory";
 // Rich text snippets and the formatting toolbar; when off, everything is plain text
 inline constexpr char RichText[] = "editor/richText";
+// Colour code snippets by their language (when the build supports it)
+inline constexpr char SyntaxHighlighting[] = "editor/syntaxHighlighting";
 }
 
 class SettingsDialog : public QDialog

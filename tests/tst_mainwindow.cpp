@@ -12,6 +12,8 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTextEdit>
+#include <QTextLayout>
+#include <QTextBlock>
 #include <QTimer>
 #include <QtTest>
 
@@ -239,6 +241,39 @@ private slots:
         QCOMPARE(saved.format, Snippet::PlainText);
         QCOMPARE(saved.language, QString("Python"));
         QCOMPARE(saved.content, QString("print('hi')"));
+    }
+
+    void highlightsCodeWhenEnabled()
+    {
+#ifndef HAVE_SYNTAX_HIGHLIGHTING
+        QSKIP("Built without KSyntaxHighlighting");
+#else
+        Snippet code;
+        code.title = "Code";
+        code.language = "Python";
+        code.content = "def hello():\n    return 'hi'  # comment";
+        Database::instance().addSnippet(code);
+        reload();
+        selectRow(0);
+        QVERIFY(!m_content->document()->firstBlock().layout()->formats().isEmpty());
+        QCOMPARE(m_content->toPlainText(), code.content);
+
+        // Highlighting doesn't count as a change
+        QVERIFY(!m_window->findChild<QPushButton *>("saveButton")->isEnabled());
+
+        // Switching between code and other snippets doesn't count as a change either
+        Database::instance().addSnippet("Plain", "text");
+        reload();
+        selectRow(0);
+        selectRow(1);
+        selectRow(0);
+        QVERIFY(!m_window->findChild<QPushButton *>("saveButton")->isEnabled());
+
+        QSettings().setValue("editor/syntaxHighlighting", false);
+        reload();
+        selectRow(0);
+        QVERIFY(m_content->document()->firstBlock().layout()->formats().isEmpty());
+#endif
     }
 
 private:

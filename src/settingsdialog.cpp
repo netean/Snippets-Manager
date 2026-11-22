@@ -1,5 +1,6 @@
 #include "settingsdialog.h"
 #include "database.h"
+#include "languages.h"
 #include "messagebox.h"
 #include <QCheckBox>
 #include <QSettings>
@@ -39,6 +40,20 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     richTextHelp->setWordWrap(true);
     richTextHelp->setContentsMargins(20, 0, 0, 0);
     editorLayout->addWidget(richTextHelp);
+
+    QCheckBox *highlightingCheck = new QCheckBox("Syntax highlighting for code snippets");
+    highlightingCheck->setObjectName("highlightingCheck");
+    highlightingCheck->setToolTip("Colours snippets whose type is a programming language");
+    highlightingCheck->setChecked(settings.value(SettingsKeys::SyntaxHighlighting, true).toBool());
+    editorLayout->addWidget(highlightingCheck);
+    if (!Languages::highlightingAvailable()) {
+        highlightingCheck->setEnabled(false);
+        QLabel *unavailable = new QLabel("This copy of Snippet Manager was built without syntax highlighting "
+                                         "(it needs KDE's KSyntaxHighlighting library).");
+        unavailable->setWordWrap(true);
+        unavailable->setContentsMargins(20, 0, 0, 0);
+        editorLayout->addWidget(unavailable);
+    }
     editorLayout->addStretch();
 
     // Clipboard
@@ -97,6 +112,10 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     mainLayout->addWidget(m_tabs);
     mainLayout->addWidget(buttonBox);
 
+    connect(highlightingCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        QSettings().setValue(SettingsKeys::SyntaxHighlighting, checked);
+        emit editorSettingsChanged();
+    });
     connect(richTextCheck, &QCheckBox::toggled, this, [this](bool checked) {
         QSettings().setValue(SettingsKeys::RichText, checked);
         emit editorSettingsChanged();

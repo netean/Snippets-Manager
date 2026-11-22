@@ -12,6 +12,7 @@ class QTextCharFormat;
 class QTextEdit;
 class QToolBar;
 class TagEdit;
+namespace KSyntaxHighlighting { class SyntaxHighlighter; }
 
 // The right-hand side of the main window: a snippet's title, tags, type and
 // content, with a small formatting toolbar for rich text snippets
@@ -52,6 +53,9 @@ public:
     void focusTitle();
     void focusContent();
 
+protected:
+    void changeEvent(QEvent *event) override;
+
 signals:
     // Emitted whenever the user changes the title, tags, type or content
     void changed();
@@ -60,6 +64,7 @@ signals:
 
 private:
     void markChanged();
+    void updateHighlighting();
     void populateTypes();
     void selectType(const Snippet &snippet);
     void showContent(const QString &content);
@@ -95,6 +100,9 @@ private:
     QAction *m_codeAction;
     QAction *m_bulletAction;
     QAction *m_numberAction;
+
+    // Colours code snippets (null in builds without KSyntaxHighlighting)
+    KSyntaxHighlighting::SyntaxHighlighter *m_highlighter = nullptr;
 };
 
 #endif // SNIPPETEDITOR_H

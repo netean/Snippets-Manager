@@ -17,6 +17,14 @@
 #include <QTextList>
 #include <QToolBar>
 #include <QVBoxLayout>
+#include <QScopeGuard>
+
+#ifdef HAVE_SYNTAX_HIGHLIGHTING
+#include <KSyntaxHighlighting/Definition>
+#include <KSyntaxHighlighting/Repository>
+#include <KSyntaxHighlighting/SyntaxHighlighter>
+#include <KSyntaxHighlighting/Theme>
+#endif
 
 // Type combo entries: "plain", "rich" or "code:<language>"
 static QString typeKey(Snippet::Format format, const QString &language)
@@ -49,6 +57,9 @@ SnippetEditor::SnippetEditor(QWidget *parent)
     m_contentEdit = new QTextEdit;
     m_contentEdit->setObjectName("contentEdit");
     m_contentEdit->setAcceptRichText(false);
+#ifdef HAVE_SYNTAX_HIGHLIGHTING
+    m_highlighter = new KSyntaxHighlighting::SyntaxHighlighter(m_contentEdit->document());
+#endif
 
     // Formatting toolbar, shown while editing rich text
     m_formatBar = new QToolBar;
@@ -178,7 +189,47 @@ void SnippetEditor::showContent(const QString &content)
                                                   ? font()
                                                   : QFontDatabase::systemFont(QFontDatabase::FixedFont));
     m_loading = wasLoading;
+    updateHighlighting();
     updateToolbar();
+}
+
+void SnippetEditor::updateHighlighting()
+{
+#ifdef HAVE_SYNTAX_HIGHLIGHTING
+    // Re-colouring isn't an edit by the user
+    bool wasLoading = m_loading;
+    m_loading = true;
+    auto restore = qScopeGuard([this, wasLoading]() { m_loading = wasLoading; });
+    bool enabled = QSettings().value(SettingsKeys::SyntaxHighlighting, true).toBool();
+    KSyntaxHighlighting::Definition definition;
+    if (enabled && !m_formatted && !m_language.isEmpty()) {
+        definition = Languages::repository().definitionForName(m_language);
+    }
+    if (!definition.isValid()) {
+        // Detach completely: even without a language, the highlighter would
+        // colour the text with its theme's default colours
+        if (m_highlighter->document()) {
+            m_highlighter->setDocument(nullptr);
+        }
+        return;
+    }
+    if (!m_highlighter->document()) {
+        m_highlighter->setDocument(m_contentEdit->document());
+    }
+    // Match the colours to a light or dark colour scheme
+    m_highlighter->setTheme(Languages::repository().themeForPalette(palette()));
+    m_highlighter->setDefinition(definition);
+    m_highlighter->rehighlight();
+#endif
+}
+
+void SnippetEditor::changeEvent(QEvent *event)
+{
+    // Switching between light and dark mode changes the highlighting colours
+    if (event->type() == QEvent::PaletteChange) {
+        updateHighlighting();
+    }
+    QWidget::changeEvent(event);
 }
 
 void SnippetEditor::setSnippet(const Snippet &snippet)

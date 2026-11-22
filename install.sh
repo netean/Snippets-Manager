@@ -138,6 +138,13 @@ fi
 # ---------------------------------------------------------------------------
 # Dependencies
 # ---------------------------------------------------------------------------
+# Installs an optional package; carries on without it if the distro doesn't have it
+optional_install() {
+    if ! "$@"; then
+        warn "Optional package not available (${*: -1}); building without syntax highlighting."
+    fi
+}
+
 install_dependencies() {
     local sudo_cmd=""
     [[ $EUID -ne 0 ]] && sudo_cmd="sudo"
@@ -146,15 +153,19 @@ install_dependencies() {
         info "Installing dependencies with apt"
         $sudo_cmd apt-get update
         $sudo_cmd apt-get install -y cmake make g++ qt6-base-dev libqt6sql6-sqlite
+        optional_install $sudo_cmd apt-get install -y libkf6syntaxhighlighting-dev
     elif command -v dnf >/dev/null; then
         info "Installing dependencies with dnf"
         $sudo_cmd dnf install -y cmake make gcc-c++ qt6-qtbase-devel
+        optional_install $sudo_cmd dnf install -y kf6-syntax-highlighting-devel
     elif command -v pacman >/dev/null; then
         info "Installing dependencies with pacman"
         $sudo_cmd pacman -S --needed --noconfirm cmake make gcc qt6-base
+        optional_install $sudo_cmd pacman -S --needed --noconfirm syntax-highlighting
     elif command -v zypper >/dev/null; then
         info "Installing dependencies with zypper"
         $sudo_cmd zypper install -y cmake make gcc-c++ qt6-base-devel qt6-sql-sqlite
+        optional_install $sudo_cmd zypper install -y kf6-syntax-highlighting-devel
     else
         die "Couldn't find a supported package manager. Install CMake, a C++17 compiler and Qt 6 (Core, Widgets, Sql with the SQLite driver) manually."
     fi
