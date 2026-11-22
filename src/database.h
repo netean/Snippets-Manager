@@ -20,6 +20,10 @@ struct Snippet {
     // Syntax highlighting language (a KSyntaxHighlighting definition name), or empty
     QString language;
     QStringList tags;
+    // The folder it's in (-1 for none), and that folder's path like "Work/Scripts"
+    // (filled in when listing, and used to place imported snippets)
+    int folderId = -1;
+    QString folderPath;
     // In local time. deleted is only valid while the snippet is in the trash.
     QDateTime created;
     QDateTime modified;
@@ -28,6 +32,12 @@ struct Snippet {
     bool isValid() const { return id != -1; }
     bool isRich() const { return format == RichText; }
     bool inTrash() const { return deleted.isValid(); }
+};
+
+struct Folder {
+    int id = -1;
+    QString name;
+    int parentId = -1;  // -1 for a top-level folder
 };
 
 // Which snippets to list
@@ -50,7 +60,7 @@ public:
 
     // Version of the database layout. 1.x databases have version 0 and are
     // upgraded (after making a backup) when they're opened.
-    static constexpr int SchemaVersion = 2;
+    static constexpr int SchemaVersion = 3;
 
     static Database& instance();
 
@@ -93,6 +103,20 @@ public:
     // than a plain substring search
     bool hasSearchIndex() const { return m_searchIndex; }
 
+    // Folders. Deleting one moves what's in it (snippets and folders) up a level.
+    QList<Folder> folders();
+    int addFolder(const QString& name, int parentId, QString* errorMessage = nullptr);
+    bool renameFolder(int id, const QString& name, QString* errorMessage = nullptr);
+    bool deleteFolder(int id, QString* errorMessage = nullptr);
+    bool moveFolder(int id, int newParentId, QString* errorMessage = nullptr);
+    bool moveSnippetToFolder(int snippetId, int folderId, QString* errorMessage = nullptr);
+    // "Work/Scripts" style path of a folder (empty for none)
+    QString folderPath(int id);
+    // The folder at a path, optionally creating it (and its parents); -1 if none
+    int folderForPath(const QString& path, bool create, QString* errorMessage = nullptr);
+    // Tidies a folder name: trims it and replaces "/" (which separates folders in paths)
+    static QString cleanFolderName(const QString& name);
+
     // Tags in use by snippets that aren't in the trash, with how many use each
     QList<QPair<QString, int>> tagCounts();
     // Cleans up a list of tags: trims them and drops empty and repeated ones
@@ -113,6 +137,8 @@ private:
     void indexSnippet(int id);
     void unindexSnippet(int id);
     bool writeTags(int id, const QStringList& tags);
+    bool folderNameTaken(const QString& name, int parentId, int exceptId);
+    QHash<int, QString> folderPaths();
     int insertSnippet(const Snippet& snippet, QString* errorMessage);
     QHash<int, QStringList> readAllTags();
     bool exec(QSqlQuery& query, QString* errorMessage);

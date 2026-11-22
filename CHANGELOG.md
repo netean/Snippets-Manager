@@ -5,6 +5,7 @@
 New features are being built on `main`. Fixes for 1.x go on the `v1` branch.
 
 ### New
+- **Folders**: right-click the list to add folders (they can be nested), then drag snippets into them or use Move to Folder. Deleting a folder moves what's in it up a level; snippets are never deleted with it. Exports and imports keep each snippet's folder.
 - **Tags**: add comma-separated tags to snippets (existing tags are suggested), and filter the list by tag.
 - **Snippet types**: plain text, rich text or a programming language.
 - **Rich text editor**: a small formatting toolbar (bold, italic, strikethrough, code, lists). Rich text is stored as Markdown, and copied with its formatting. Settings > Editor can turn it off, making everything plain text.

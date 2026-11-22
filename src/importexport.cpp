@@ -99,6 +99,7 @@ QByteArray toJson(const QList<Snippet> &snippets)
         object["type"] = typeName(snippet);
         if (!snippet.language.isEmpty()) object["language"] = snippet.language;
         object["tags"] = QJsonArray::fromStringList(snippet.tags);
+        if (!snippet.folderPath.isEmpty()) object["folder"] = snippet.folderPath;
         if (snippet.created.isValid()) object["created"] = isoTime(snippet.created);
         if (snippet.modified.isValid()) object["modified"] = isoTime(snippet.modified);
         array.append(object);
@@ -155,6 +156,7 @@ QList<Snippet> fromJson(const QByteArray &data, QString *errorMessage)
             snippet.tags = splitTags(tags.toString());
         }
         applyType(snippet, field(object, {"type", "format"}).toString(), field(object, {"language", "lang"}).toString());
+        snippet.folderPath = field(object, {"folder", "path"}).toString().trimmed();
         snippet.created = parseTime(field(object, {"created", "createdAt"}).toString());
         snippet.modified = parseTime(field(object, {"modified", "updated", "modifiedAt"}).toString());
         snippets.append(snippet);
@@ -177,6 +179,7 @@ QString toMarkdown(const QList<Snippet> &snippets)
         details["type"] = typeName(snippet);
         if (!snippet.language.isEmpty()) details["language"] = snippet.language;
         if (!snippet.tags.isEmpty()) details["tags"] = QJsonArray::fromStringList(snippet.tags);
+        if (!snippet.folderPath.isEmpty()) details["folder"] = snippet.folderPath;
         if (snippet.created.isValid()) details["created"] = isoTime(snippet.created);
         if (snippet.modified.isValid()) details["modified"] = isoTime(snippet.modified);
         QString json = QString::fromUtf8(QJsonDocument(details).toJson(QJsonDocument::Compact));
@@ -270,6 +273,7 @@ QList<Snippet> fromMarkdown(const QString &text, QString *errorMessage)
         for (const QJsonValue &tag : details.value("tags").toArray()) tags << tag.toString();
         snippet.tags = Database::normalizeTags(tags);
         applyType(snippet, details.value("type").toString(), details.value("language").toString());
+        snippet.folderPath = details.value("folder").toString().trimmed();
         snippet.created = parseTime(details.value("created").toString());
         snippet.modified = parseTime(details.value("modified").toString());
         snippets.append(snippet);
@@ -295,10 +299,10 @@ static QString csvField(const QString &value)
 
 QString toCsv(const QList<Snippet> &snippets)
 {
-    QString out = "title,content,tags,type,language,created,modified\r\n";
+    QString out = "title,content,tags,type,language,folder,created,modified\r\n";
     for (const Snippet &snippet : snippets) {
         QStringList row = {snippet.title, snippet.content, snippet.tags.join(", "), typeName(snippet),
-                           snippet.language, isoTime(snippet.created), isoTime(snippet.modified)};
+                           snippet.language, snippet.folderPath, isoTime(snippet.created), isoTime(snippet.modified)};
         for (QString &value : row) value = csvField(value);
         out += row.join(',') + "\r\n";
     }
@@ -392,7 +396,8 @@ QList<Snippet> fromCsv(const QString &input, QString *errorMessage)
         {"content", "content"}, {"body", "content"}, {"text", "content"}, {"snippet", "content"},
         {"value", "content"}, {"expansion", "content"}, {"phrase", "content"}, {"replacement", "content"},
         {"tags", "tags"}, {"tag", "tags"}, {"labels", "tags"}, {"category", "tags"}, {"categories", "tags"},
-        {"folder", "tags"}, {"group", "tags"},
+        {"group", "tags"},
+        {"folder", "folder"}, {"path", "folder"}, {"directory", "folder"},
         {"type", "type"}, {"format", "type"},
         {"language", "language"}, {"lang", "language"}, {"syntax", "language"},
         {"created", "created"}, {"created at", "created"}, {"date", "created"},
@@ -434,6 +439,7 @@ QList<Snippet> fromCsv(const QString &input, QString *errorMessage)
         if (snippet.title.isEmpty()) snippet.title = snippet.content.section('\n', 0, 0).left(60).trimmed();
         snippet.tags = splitTags(value(row, "tags"));
         applyType(snippet, value(row, "type"), value(row, "language"));
+        snippet.folderPath = value(row, "folder").trimmed();
         snippet.created = parseTime(value(row, "created"));
         snippet.modified = parseTime(value(row, "modified"));
         snippets.append(snippet);

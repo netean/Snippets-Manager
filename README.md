@@ -24,7 +24,7 @@ Used and tested on Fedora and CachyOs
 
 - **Add, Edit, Delete**: Full CRUD operations for text snippets, with a trash and undo
 - **Search**: Fast, ranked search through titles, tags and content (matches part of a word)
-- **Tags**: Group snippets with tags and filter the list by tag
+- **Folders and tags**: Organise snippets in folders (drag and drop), and tag them across folders
 - **Plain text, rich text or code**: A small formatting toolbar for rich text, and syntax highlighting for code (both can be turned off)
 - **Copy to Clipboard**: Select a snippet to copy it, with placeholders like `{{date}}` filled in
 - **Quick search**: A popup from the tray or a global keyboard shortcut, to find and copy a snippet from any app
@@ -103,15 +103,16 @@ Or just download the binary release from the releases page.
 3. **Editing Content**: Select a snippet, click "Edit" (Ctrl+E), make changes and click "Save" (Ctrl+S)
 4. **Type**: While editing, pick Plain text, Rich text (with a formatting toolbar: bold, italic, strikethrough, code and lists) or a programming language (highlighted, in a fixed-width font)
 5. **Searching**: Type in the search box (Ctrl+F) to find snippets by title, tags or content. Results are ranked by how well they match. Escape clears the search, and the Down arrow moves into the list
-6. **Filtering**: Use "Show" to list all snippets, only untagged ones, only those with a tag, or the trash
-7. **Sorting**: Use the "Sort" drop-down to order snippets by title (A-Z / Z-A) or by date created (oldest / newest first)
-8. **Copying**: Selecting a snippet copies its content to the clipboard (rich text is copied with its formatting). Clicking anywhere in the content area copies it again (drag to select part of the text to copy just that part). Ctrl+Shift+C or the "Copy" button copies too
-9. **Placeholders**: `{{date}}`, `{{time}}`, `{{datetime}}`, `{{clipboard}}` and `{{uuid}}` are filled in when a snippet is copied. Dates and times can take a format, like `{{date:dd/MM/yyyy}}`. Put a backslash before one to copy it as written: `\{{date}}`
-10. **Details**: Right-click a snippet and choose "Details..." (or press Alt+Enter) to see when it was created and last changed
-11. **Deleting**: Delete (or the Delete key in the list) moves a snippet to the trash. Ctrl+Z brings back the last one deleted. In "Show: Trash" you can restore snippets or delete them forever
-12. **Quick search**: From the tray icon (middle-click), the global shortcut or `snippetmanager --popup`, a small window opens: type to find a snippet, press Enter to copy it, Ctrl+Enter to open it in the main window, Escape to close
-13. **Import and export**: File > Import... reads JSON, Markdown and CSV files (CSV files from other apps work too: the columns are worked out from the header). File > Export... writes all your snippets, or just those shown, as JSON (best for backups), Markdown or CSV
-14. **Settings**: File > Settings... has four tabs:
+6. **Folders**: Right-click the list and choose "New Folder..." (or press Ctrl+Shift+N). Drag snippets onto a folder to move them there (or onto empty space to take them out), or right-click a snippet and choose "Move to Folder". Folders can go inside other folders. Right-click a folder to add a snippet or subfolder to it, rename it (F2) or delete it. Deleting a folder never deletes snippets: what was in it moves up a level. While searching, filtering by tag or looking at the trash, the list is flat, without folders
+7. **Filtering**: Use "Show" to list all snippets, only untagged ones, only those with a tag, or the trash
+8. **Sorting**: Use the "Sort" drop-down to order snippets by title (A-Z / Z-A) or by date created (oldest / newest first)
+9. **Copying**: Selecting a snippet copies its content to the clipboard (rich text is copied with its formatting). Clicking anywhere in the content area copies it again (drag to select part of the text to copy just that part). Ctrl+Shift+C or the "Copy" button copies too
+10. **Placeholders**: `{{date}}`, `{{time}}`, `{{datetime}}`, `{{clipboard}}` and `{{uuid}}` are filled in when a snippet is copied. Dates and times can take a format, like `{{date:dd/MM/yyyy}}`. Put a backslash before one to copy it as written: `\{{date}}`
+11. **Details**: Right-click a snippet and choose "Details..." (or press Alt+Enter) to see when it was created and last changed
+12. **Deleting**: Delete (or the Delete key in the list) moves a snippet to the trash. Ctrl+Z brings back the last one deleted. In "Show: Trash" you can restore snippets or delete them forever
+13. **Quick search**: From the tray icon (middle-click), the global shortcut or `snippetmanager --popup`, a small window opens: type to find a snippet, press Enter to copy it, Ctrl+Enter to open it in the main window, Escape to close
+14. **Import and export**: File > Import... reads JSON, Markdown and CSV files (CSV files from other apps work too: the columns are worked out from the header). File > Export... writes all your snippets, or just those shown, as JSON (best for backups), Markdown or CSV
+15. **Settings**: File > Settings... has four tabs:
     - **Editor**: turn rich text editing or syntax highlighting off
     - **Clipboard**: copying on select, keeping copied snippets out of clipboard history (for clipboard managers that support it, such as KDE's Klipper), and placeholders
     - **Quick Access**: the tray icon, starting at login, and the global shortcut
@@ -132,7 +133,7 @@ You can move it, or switch to another database file, from File > Settings.... Th
 
 The database file is only readable by your user account, because snippets often hold things like tokens and passwords. Snippet Manager won't open, or write to, a SQLite file that isn't a snippets database. Exported files are private to your account too.
 
-When 2.0 first opens a 1.x database, it upgrades it and saves a copy of the original next to it (for example `snippets-v0-backup.db`). 1.3 can still open an upgraded database, but it doesn't show tags or formatting, and it shows snippets that are in the trash.
+When 2.0 first opens a 1.x database, it upgrades it and saves a copy of the original next to it (for example `snippets-v0-backup.db`). 1.3 can still open an upgraded database, but it doesn't show tags, folders or formatting, and it shows snippets that are in the trash.
 
 
 ## Screenshots

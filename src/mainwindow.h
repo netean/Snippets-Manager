@@ -2,6 +2,7 @@
 #define MAINWINDOW_H
 
 #include <QMainWindow>
+#include <QSet>
 #include "snippetmodel.h"
 
 class GlobalShortcut;
@@ -11,7 +12,8 @@ class QuickSearch;
 class QComboBox;
 class QLabel;
 class QLineEdit;
-class QListView;
+class QTreeView;
+class QMenu;
 class QPushButton;
 class QSplitter;
 class QTimer;
@@ -52,6 +54,10 @@ private slots:
     void onRestoreSnippet();
     void onUndoDelete();
     void onEmptyTrash();
+    void onNewFolder();
+    void onRenameFolder();
+    void onDeleteFolder();
+    void onItemsMoved(const QString &errorMessage);
     void onImport();
     void onExport();
     void onQuit();
@@ -75,6 +81,14 @@ private:
     bool ensureSaved();
     void loadSnippet(int id);
     void selectSnippet(int id);
+    void selectFolder(int id);
+    // The folder selected in the list (-1 if a snippet or nothing is selected)
+    int selectedFolderId() const;
+    // Where new snippets and folders go: the selected folder, or the selected snippet's folder
+    int targetFolderId() const;
+    void restoreExpandedFolders();
+    void showAllSnippets();
+    void addMoveToFolderMenu(QMenu *menu);
     void setContentEditable(bool editable);
     bool inTrashView() const;
     bool copyOnSelect() const;
@@ -86,7 +100,7 @@ private:
     QLineEdit *m_searchEdit = nullptr;
     QComboBox *m_tagFilterCombo = nullptr;
     QComboBox *m_sortCombo = nullptr;
-    QListView *m_snippetList = nullptr;
+    QTreeView *m_snippetList = nullptr;
     QPushButton *m_addButton = nullptr;
     QPushButton *m_editButton = nullptr;
     QPushButton *m_deleteButton = nullptr;
@@ -108,11 +122,15 @@ private:
     QAction *m_restoreAction = nullptr;
     QAction *m_undoDeleteAction = nullptr;
     QAction *m_emptyTrashAction = nullptr;
+    QAction *m_newFolderAction = nullptr;
+    QAction *m_renameFolderAction = nullptr;
 
     SnippetModel *m_model = nullptr;
     bool m_updatingSelection = false;
     // Snippets moved to the trash, most recent last, for Undo Delete
     QList<int> m_recentlyTrashed;
+    // Folders the user has opened in the list, kept across refreshes and runs
+    QSet<int> m_expandedFolders;
 
     QSystemTrayIcon *m_tray = nullptr;
     QuickSearch *m_quickSearch = nullptr;

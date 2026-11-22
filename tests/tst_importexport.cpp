@@ -16,6 +16,7 @@ static QList<Snippet> sampleSnippets()
     plain.title = "Plain, with \"quotes\"";
     plain.content = "Line one, with a comma\nLine \"two\"\n## not a heading\n```\nnot a fence end";
     plain.tags = {"misc", "work"};
+    plain.folderPath = "Work/Letters";
     plain.created = created.toLocalTime();
     plain.modified = modified.toLocalTime();
 
@@ -45,6 +46,7 @@ static void compareSnippets(const QList<Snippet> &actual, const QList<Snippet> &
         QCOMPARE(actual[i].format, expected[i].format);
         QCOMPARE(actual[i].language, expected[i].language);
         QCOMPARE(actual[i].tags, expected[i].tags);
+        QCOMPARE(actual[i].folderPath, expected[i].folderPath);
         if (checkDates) {
             QCOMPARE(actual[i].created, expected[i].created);
             QCOMPARE(actual[i].modified, expected[i].modified);
@@ -180,6 +182,15 @@ private slots:
         Snippet config = db.snippets(filter).value(0);
         QCOMPARE(config.language, QString("INI Files"));
         QCOMPARE(config.tags, QStringList({"config"}));
+
+        // and folders, which are created as needed
+        Snippet foldered;
+        foldered.title = "In a folder";
+        foldered.folderPath = "Work/Letters";
+        QVERIFY(db.importSnippets({foldered}, &added, &skipped, &error));
+        filter.search = "In a folder";
+        QCOMPARE(db.snippets(filter).value(0).folderPath, QString("Work/Letters"));
+        QCOMPARE(db.folders().size(), 2);
     }
 };
 

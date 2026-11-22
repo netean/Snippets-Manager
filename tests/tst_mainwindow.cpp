@@ -12,6 +12,8 @@
 #include <QLineEdit>
 #include <QListView>
 #include <QMessageBox>
+#include <QInputDialog>
+#include <QAction>
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
@@ -387,13 +389,77 @@ private slots:
         QCOMPARE(Autostart::desktopExecQuote("/x/a\"b$c"), QString("\"/x/a\\\\\"b\\\\$c\""));
     }
 
+    void foldersHoldSnippets()
+    {
+        Database::instance().addSnippet("Loose", "x");
+        reload();
+
+        // New Folder asks for a name
+        answerNextInput("Work");
+        m_window->findChild<QAction *>("newFolderAction")->trigger();
+        QCOMPARE(Database::instance().folders().size(), 1);
+        int work = Database::instance().folders().value(0).id;
+        QAbstractItemModel *model = m_list->model();
+        QCOMPARE(model->rowCount(), 2);  // the folder, then the snippet
+        QModelIndex folderIndex = model->index(0, 0);
+        QCOMPARE(folderIndex.data().toString(), QString("Work"));
+
+        // With the folder selected, a new snippet goes in it
+        m_list->setCurrentIndex(folderIndex);
+        // (Triggered directly: after a dialog the offscreen platform leaves no active window for Ctrl+N)
+        m_window->findChild<QAction *>("newAction")->trigger();
+        SnippetFilter filter;
+        filter.search = "New Snippet";
+        Snippet created = Database::instance().snippets(filter).value(0);
+        QCOMPARE(created.folderId, work);
+        QCOMPARE(model->rowCount(model->index(0, 0)), 1);
+
+        // Dragging "Loose" onto the folder moves it there
+        QModelIndex loose;
+        for (int row = 0; row < model->rowCount(); ++row) {
+            if (model->index(row, 0).data().toString() == "Loose") loose = model->index(row, 0);
+        }
+        QVERIFY(loose.isValid());
+        QMimeData *dragged = model->mimeData({loose});
+        QVERIFY(model->dropMimeData(dragged, Qt::MoveAction, -1, 0, model->index(0, 0)));
+        delete dragged;
+        QTRY_COMPARE(model->rowCount(model->index(0, 0)), 2);
+        QCOMPARE(model->rowCount(), 1);
+
+        // Searching shows a flat list, without folders
+        QLineEdit *search = m_window->findChild<QLineEdit *>("searchEdit");
+        search->setText("Loose");
+        QTRY_COMPARE(model->index(0, 0).data().toString(), QString("Loose"));
+        QCOMPARE(model->rowCount(), 1);
+        search->clear();
+        QTRY_COMPARE(model->index(0, 0).data().toString(), QString("Work"));
+
+        // Deleting the folder keeps its snippets, at the top level
+        m_list->setCurrentIndex(model->index(0, 0));
+        m_window->findChild<QPushButton *>("deleteButton")->click();
+        QVERIFY(Database::instance().folders().isEmpty());
+        QCOMPARE(Database::instance().snippets().size(), 2);
+        QCOMPARE(model->rowCount(), 2);
+    }
+
 private:
+    // Types into the next input dialog that opens and accepts it
+    static void answerNextInput(const QString &text)
+    {
+        QTimer::singleShot(0, [text]() {
+            auto *dialog = qobject_cast<QInputDialog *>(QApplication::activeModalWidget());
+            QVERIFY2(dialog, "Expected an input dialog");
+            dialog->setTextValue(text);
+            dialog->accept();
+        });
+    }
+
     void createWindow()
     {
         m_window = new MainWindow;
         m_window->show();
         QVERIFY(QTest::qWaitForWindowExposed(m_window));
-        m_list = m_window->findChild<QListView *>("snippetList");
+        m_list = m_window->findChild<QAbstractItemView *>("snippetList");
         m_title = m_window->findChild<QLineEdit *>("titleEdit");
         m_tags = m_window->findChild<QLineEdit *>("tagEdit");
         m_content = m_window->findChild<QTextEdit *>("contentEdit");
@@ -434,7 +500,7 @@ private:
     QTemporaryDir m_dir;
     int m_count = 0;
     MainWindow *m_window = nullptr;
-    QListView *m_list = nullptr;
+    QAbstractItemView *m_list = nullptr;
     QLineEdit *m_title = nullptr;
     QLineEdit *m_tags = nullptr;
     QTextEdit *m_content = nullptr;

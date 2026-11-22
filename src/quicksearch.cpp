@@ -80,6 +80,7 @@ QuickSearch::QuickSearch(QWidget *parent)
     m_search->installEventFilter(this);
 
     m_model = new SnippetModel(this);
+    m_model->setFlat(true);
     m_list = new QListView;
     m_list->setObjectName("quickSearchList");
     m_list->setModel(m_model);

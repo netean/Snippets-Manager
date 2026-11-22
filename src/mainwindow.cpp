@@ -18,7 +18,8 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
-#include <QListView>
+#include <QInputDialog>
+#include <QTreeView>
 #include <QLocale>
 #include <QMenu>
 #include <QMenuBar>
@@ -36,6 +37,7 @@
 static const char *SortOrderKey = "view/sortOrder";
 static const char *GeometryKey = "window/geometry";
 static const char *SplitterKey = "window/splitter";
+static const char *ExpandedFoldersKey = "view/expandedFolders";
 
 // What each entry in the tag filter shows
 enum TagFilterKind { AllSnippets, Untagged, OneTag, Trash };
@@ -51,6 +53,27 @@ MainWindow::MainWindow(QWidget *parent)
 
     m_model = new SnippetModel(this);
     m_snippetList->setModel(m_model);
+
+    // Keep open folders open when the list refreshes, and between runs
+    for (const QVariant &id : QSettings().value(ExpandedFoldersKey).toList()) {
+        m_expandedFolders.insert(id.toInt());
+    }
+    auto saveExpanded = [this]() {
+        QVariantList ids;
+        for (int id : m_expandedFolders) ids << id;
+        QSettings().setValue(ExpandedFoldersKey, ids);
+    };
+    connect(m_snippetList, &QTreeView::expanded, this, [this, saveExpanded](const QModelIndex &index) {
+        m_expandedFolders.insert(m_model->data(index, SnippetModel::FolderIdRole).toInt());
+        saveExpanded();
+    });
+    connect(m_snippetList, &QTreeView::collapsed, this, [this, saveExpanded](const QModelIndex &index) {
+        m_expandedFolders.remove(m_model->data(index, SnippetModel::FolderIdRole).toInt());
+        saveExpanded();
+    });
+    connect(m_model, &QAbstractItemModel::modelReset, this, &MainWindow::restoreExpandedFolders);
+    connect(m_model, &SnippetModel::itemsMoved, this, &MainWindow::onItemsMoved);
+    restoreExpandedFolders();
 
     // Restore the last used sort order
     int savedOrder = QSettings().value(SortOrderKey, Database::CreatedDescending).toInt();
@@ -260,9 +283,15 @@ void MainWindow::setupUI()
     sortLayout->addWidget(m_sortCombo, 1);
     leftLayout->addLayout(sortLayout);
 
-    m_snippetList = new QListView;
+    m_snippetList = new QTreeView;
     m_snippetList->setObjectName("snippetList");
-    m_snippetList->setUniformItemSizes(true);
+    m_snippetList->setHeaderHidden(true);
+    m_snippetList->setUniformRowHeights(true);
+    m_snippetList->setSelectionMode(QAbstractItemView::SingleSelection);
+    // Drag snippets and folders into folders
+    m_snippetList->setDragDropMode(QAbstractItemView::DragDrop);
+    m_snippetList->setDefaultDropAction(Qt::MoveAction);
+    m_snippetList->setDropIndicatorShown(true);
     leftLayout->addWidget(m_snippetList);
 
     QHBoxLayout *leftButtonLayout = new QHBoxLayout;
@@ -310,6 +339,7 @@ void MainWindow::setupUI()
 void MainWindow::setupActions()
 {
     m_newAction = new QAction("&New Snippet", this);
+    m_newAction->setObjectName("newAction");
     m_newAction->setShortcut(QKeySequence::New);
     connect(m_newAction, &QAction::triggered, this, &MainWindow::onAddSnippet);
 
@@ -344,6 +374,18 @@ void MainWindow::setupActions()
     m_emptyTrashAction = new QAction("Empty &Trash...", this);
     connect(m_emptyTrashAction, &QAction::triggered, this, &MainWindow::onEmptyTrash);
 
+    m_newFolderAction = new QAction(QIcon::fromTheme("folder-new"), "New &Folder...", this);
+    m_newFolderAction->setObjectName("newFolderAction");
+    m_newFolderAction->setShortcut(QKeySequence("Ctrl+Shift+N"));
+    connect(m_newFolderAction, &QAction::triggered, this, &MainWindow::onNewFolder);
+
+    m_renameFolderAction = new QAction("&Rename Folder...", this);
+    m_renameFolderAction->setObjectName("renameFolderAction");
+    m_renameFolderAction->setShortcut(QKeySequence(Qt::Key_F2));
+    m_renameFolderAction->setShortcutContext(Qt::WidgetShortcut);
+    m_snippetList->addAction(m_renameFolderAction);
+    connect(m_renameFolderAction, &QAction::triggered, this, &MainWindow::onRenameFolder);
+
     m_detailsAction = new QAction("Snippet &Details...", this);
     m_detailsAction->setShortcut(QKeySequence("Alt+Return"));
     connect(m_detailsAction, &QAction::triggered, this, &MainWindow::onShowDetails);
@@ -351,20 +393,42 @@ void MainWindow::setupActions()
     // Right-click menu for the snippet list
     m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_snippetList, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
-        if (!m_snippetList->indexAt(pos).isValid() || currentId() == -1) return;
+        QModelIndex index = m_snippetList->indexAt(pos);
+        if (!index.isValid()) {
+            // Right-click on empty space: new items go at the top level
+            selectSnippet(-1);
+            loadSnippet(-1);
+        }
         QMenu menu(this);
-        menu.addAction(m_copyAction);
         if (inTrashView()) {
-            menu.addAction(m_restoreAction);
-            menu.addAction(m_detailsAction);
-            menu.addSeparator();
-            menu.addAction(m_deleteAction);
+            if (index.isValid()) {
+                menu.addAction(m_copyAction);
+                menu.addAction(m_restoreAction);
+                menu.addAction(m_detailsAction);
+                menu.addSeparator();
+                menu.addAction(m_deleteAction);
+            }
             menu.addAction(m_emptyTrashAction);
-        } else {
+        } else if (index.isValid() && m_model->isFolder(index)) {
+            menu.addAction(QIcon::fromTheme("document-new"), "New Snippet &Here", this, &MainWindow::onAddSnippet);
+            menu.addAction(QIcon::fromTheme("folder-new"), "New &Subfolder...", this, &MainWindow::onNewFolder);
+            menu.addSeparator();
+            menu.addAction(m_renameFolderAction);
+            addMoveToFolderMenu(&menu);
+            menu.addSeparator();
+            menu.addAction(QIcon::fromTheme("edit-delete"), "&Delete Folder", this, &MainWindow::onDeleteFolder);
+        } else if (index.isValid()) {
+            menu.addAction(m_copyAction);
             menu.addAction(m_editAction);
             menu.addAction(m_detailsAction);
+            addMoveToFolderMenu(&menu);
+            menu.addSeparator();
+            menu.addAction(m_newFolderAction);
             menu.addSeparator();
             menu.addAction(m_deleteAction);
+        } else {
+            menu.addAction(m_newAction);
+            menu.addAction(m_newFolderAction);
         }
         menu.exec(m_snippetList->viewport()->mapToGlobal(pos));
     });
@@ -403,6 +467,8 @@ void MainWindow::setupMenus()
     editMenu->addAction(m_undoDeleteAction);
     editMenu->addSeparator();
     editMenu->addAction(m_newAction);
+    editMenu->addAction(m_newFolderAction);
+    editMenu->addAction(m_renameFolderAction);
     editMenu->addAction(m_editAction);
     editMenu->addAction(m_saveAction);
     editMenu->addSeparator();
@@ -503,9 +569,7 @@ void MainWindow::onExport()
     // Export what's listed, or everything, if the list is filtered
     QList<Snippet> all = Database::instance().snippets();
     QList<Snippet> shown;
-    for (int row = 0; row < m_model->rowCount(); ++row) {
-        shown.append(m_model->getSnippet(row));
-    }
+    shown = m_model->snippets();
     QList<Snippet> snippets = all;
     bool filtered = !inTrashView() && shown.size() != all.size();
     if (filtered) {
@@ -664,15 +728,191 @@ void MainWindow::loadSnippet(int id)
 void MainWindow::selectSnippet(int id)
 {
     m_updatingSelection = true;
-    int row = m_model->rowForId(id);
-    if (row >= 0) {
-        QModelIndex index = m_model->index(row, 0);
+    QModelIndex index = m_model->indexForSnippet(id);
+    if (index.isValid()) {
+        // Open the folders it's in, so it can be seen
+        for (QModelIndex parent = index.parent(); parent.isValid(); parent = parent.parent()) {
+            m_snippetList->expand(parent);
+        }
         m_snippetList->setCurrentIndex(index);
         m_snippetList->scrollTo(index);
     } else {
         m_snippetList->setCurrentIndex(QModelIndex());
     }
     m_updatingSelection = false;
+}
+
+void MainWindow::selectFolder(int id)
+{
+    m_updatingSelection = true;
+    QModelIndex index = m_model->indexForFolder(id);
+    for (QModelIndex parent = index.parent(); parent.isValid(); parent = parent.parent()) {
+        m_snippetList->expand(parent);
+    }
+    m_snippetList->setCurrentIndex(index);
+    if (index.isValid()) m_snippetList->scrollTo(index);
+    m_updatingSelection = false;
+}
+
+int MainWindow::selectedFolderId() const
+{
+    if (!m_model) return -1;
+    QModelIndex index = m_snippetList->currentIndex();
+    return m_model->isFolder(index) ? m_model->data(index, SnippetModel::FolderIdRole).toInt() : -1;
+}
+
+int MainWindow::targetFolderId() const
+{
+    if (!m_model->showsFolders()) return -1;
+    int folder = selectedFolderId();
+    return folder != -1 ? folder : (currentId() != -1 ? m_editor->snippet().folderId : -1);
+}
+
+void MainWindow::restoreExpandedFolders()
+{
+    bool folders = m_model->showsFolders();
+    m_snippetList->setRootIsDecorated(folders);
+    m_snippetList->setDragEnabled(folders);
+    m_snippetList->setAcceptDrops(folders);
+    for (int id : std::as_const(m_expandedFolders)) {
+        QModelIndex index = m_model->indexForFolder(id);
+        if (index.isValid()) m_snippetList->setExpanded(index, true);
+    }
+}
+
+void MainWindow::showAllSnippets()
+{
+    // Folders only show in the full list, without a search or filter
+    if (!m_searchEdit->text().isEmpty()) {
+        m_searchTimer->stop();
+        const QSignalBlocker blocker(m_searchEdit);
+        m_searchEdit->clear();
+        m_model->search(QString());
+    }
+    if (m_tagFilterCombo->currentIndex() != 0) {
+        m_tagFilterCombo->setCurrentIndex(0);
+    }
+}
+
+void MainWindow::addMoveToFolderMenu(QMenu *menu)
+{
+    QModelIndex index = m_snippetList->currentIndex();
+    if (!index.isValid() || !m_model->showsFolders()) return;
+    bool movingFolder = m_model->isFolder(index);
+    int itemId = movingFolder ? m_model->data(index, SnippetModel::FolderIdRole).toInt() : currentId();
+    int currentParent = movingFolder ? m_model->data(index.parent(), SnippetModel::FolderIdRole).toInt()
+                                     : m_editor->snippet().folderId;
+    if (!index.parent().isValid()) currentParent = -1;
+
+    QMenu *moveMenu = menu->addMenu(QIcon::fromTheme("folder-move"), "&Move to Folder");
+    QList<Folder> folders = Database::instance().folders();
+    QHash<int, QList<Folder>> children;
+    for (const Folder &folder : folders) children[folder.parentId].append(folder);
+
+    auto addTarget = [this, moveMenu, movingFolder, itemId, currentParent](int folderId, const QString &label) {
+        QAction *action = moveMenu->addAction(label);
+        action->setCheckable(true);
+        action->setChecked(folderId == currentParent);
+        action->setEnabled(folderId != currentParent);
+        connect(action, &QAction::triggered, this, [this, movingFolder, itemId, folderId]() {
+            QString error;
+            bool moved = movingFolder ? Database::instance().moveFolder(itemId, folderId, &error)
+                                      : Database::instance().moveSnippetToFolder(itemId, folderId, &error);
+            onItemsMoved(moved ? QString() : error);
+            if (folderId != -1) {
+                m_expandedFolders.insert(folderId);
+                restoreExpandedFolders();
+            }
+        });
+    };
+    addTarget(-1, "(Top level)");
+    moveMenu->addSeparator();
+    // Folders in tree order, indented by depth; a folder can't go inside itself
+    std::function<void(int, int)> addLevel = [&](int parentId, int depth) {
+        for (const Folder &folder : children.value(parentId)) {
+            if (movingFolder && folder.id == itemId) continue;
+            addTarget(folder.id, QString(depth * 4, ' ') + folder.name);
+            addLevel(folder.id, depth + 1);
+        }
+    };
+    addLevel(-1, 0);
+}
+
+void MainWindow::onNewFolder()
+{
+    if (inTrashView()) return;
+    if (!ensureSaved()) return;
+    int parent = targetFolderId();
+    QString parentPath = Database::instance().folderPath(parent);
+    bool ok = false;
+    QString name = QInputDialog::getText(this, "New Folder",
+                                         parentPath.isEmpty() ? QString("Folder name:")
+                                                              : QString("Folder name (inside %1):").arg(parentPath),
+                                         QLineEdit::Normal, QString(), &ok);
+    if (!ok || name.trimmed().isEmpty()) return;
+
+    QString error;
+    int id = Database::instance().addFolder(name, parent, &error);
+    if (id == -1) {
+        MessageBox::warning(this, "New Folder", "The folder could not be created.\n\n" + error);
+        return;
+    }
+    showAllSnippets();
+    if (parent != -1) m_expandedFolders.insert(parent);
+    m_model->refresh();
+    selectFolder(id);
+    loadSnippet(-1);
+    statusBar()->showMessage("Drag snippets onto the folder, or right-click them and choose Move to Folder", 6000);
+}
+
+void MainWindow::onRenameFolder()
+{
+    int id = selectedFolderId();
+    if (id == -1) return;
+    QString current = m_model->data(m_snippetList->currentIndex(), Qt::DisplayRole).toString();
+    bool ok = false;
+    QString name = QInputDialog::getText(this, "Rename Folder", "Folder name:", QLineEdit::Normal, current, &ok);
+    if (!ok || name.trimmed().isEmpty() || name == current) return;
+    QString error;
+    if (!Database::instance().renameFolder(id, name, &error)) {
+        MessageBox::warning(this, "Rename Folder", "The folder could not be renamed.\n\n" + error);
+        return;
+    }
+    m_model->refresh();
+    selectFolder(id);
+}
+
+void MainWindow::onDeleteFolder()
+{
+    int id = selectedFolderId();
+    if (id == -1) return;
+    QString name = m_model->data(m_snippetList->currentIndex(), Qt::DisplayRole).toString();
+    // Nothing is lost: what's inside moves up a level
+    QString error;
+    if (!Database::instance().deleteFolder(id, &error)) {
+        MessageBox::warning(this, "Delete Folder", "The folder could not be deleted.\n\n" + error);
+        return;
+    }
+    m_expandedFolders.remove(id);
+    m_model->refresh();
+    selectSnippet(-1);
+    loadSnippet(-1);
+    statusBar()->showMessage(QString("Deleted the folder '%1'; what was in it has moved up a level").arg(name), 6000);
+}
+
+void MainWindow::onItemsMoved(const QString &errorMessage)
+{
+    int snippet = currentId();
+    int folder = selectedFolderId();
+    m_model->refresh();
+    if (folder != -1) {
+        selectFolder(folder);
+    } else {
+        selectSnippet(snippet);
+    }
+    if (!errorMessage.isEmpty()) {
+        MessageBox::warning(this, "Move", "Not everything could be moved.\n\n" + errorMessage);
+    }
 }
 
 void MainWindow::refreshTags()
@@ -752,6 +992,7 @@ void MainWindow::onSelectionChanged(const QModelIndex &current)
     if (m_updatingSelection) return;
 
     int newId = current.isValid() ? m_model->data(current, SnippetModel::IdRole).toInt() : -1;
+    int folderId = m_model->isFolder(current) ? m_model->data(current, SnippetModel::FolderIdRole).toInt() : -1;
 
     if (!ensureSaved()) {
         // Stay on the snippet with unsaved changes rather than throwing them away
@@ -760,8 +1001,16 @@ void MainWindow::onSelectionChanged(const QModelIndex &current)
     }
 
     // Saving refreshes the model, which would lose the new selection, so restore it afterwards
-    selectSnippet(newId);
+    if (folderId != -1) {
+        selectFolder(folderId);
+    } else {
+        selectSnippet(newId);
+    }
     loadSnippet(newId);
+    if (folderId != -1) {
+        statusBar()->showMessage("Drag snippets onto a folder to move them, or right-click for folder options", 4000);
+        return;
+    }
 
     if (currentId() != -1) {
         if (copyOnSelect()) {
@@ -800,6 +1049,8 @@ void MainWindow::onSortOrderChanged()
 void MainWindow::onAddSnippet()
 {
     if (!ensureSaved()) return;
+    // Into the selected folder (or the selected snippet's), if folders are shown
+    int folderId = targetFolderId();
 
     // New snippets go in the normal list, not the trash
     if (inTrashView()) {
@@ -817,6 +1068,7 @@ void MainWindow::onAddSnippet()
     // New snippets get the tag being shown, so they stay in the list
     Snippet snippet;
     snippet.title = "New Snippet";
+    snippet.folderId = folderId;
     if (m_tagFilterCombo->currentData(TagFilterKindRole).toInt() == OneTag) {
         snippet.tags = {m_tagFilterCombo->currentData(TagFilterNameRole).toString()};
     }
@@ -855,6 +1107,10 @@ void MainWindow::onSaveSnippet()
 
 void MainWindow::onDeleteSnippet()
 {
+    if (selectedFolderId() != -1) {
+        onDeleteFolder();
+        return;
+    }
     int id = currentId();
     if (id == -1) return;
     QString title = m_editor->snippet().title;
@@ -885,12 +1141,10 @@ void MainWindow::onDeleteSnippet()
     }
 
     m_editor->setModified(false);
-    int row = m_model->rowForId(id);
+    // Select the next snippet, so several can be deleted in a row
+    int nextId = m_model->neighbourOf(id);
     m_model->refresh();
     refreshTags();
-    // Select the next snippet, so several can be deleted in a row
-    int next = qMin(row, m_model->rowCount() - 1);
-    int nextId = next >= 0 ? m_model->data(m_model->index(next, 0), SnippetModel::IdRole).toInt() : -1;
     selectSnippet(nextId);
     loadSnippet(nextId);
 }
@@ -1009,7 +1263,10 @@ void MainWindow::updateButtonStates()
     m_restoreButton->setEnabled(m_restoreAction->isEnabled());
     m_emptyTrashAction->setEnabled(Database::instance().trashCount() > 0);
     m_editButton->setVisible(!trash);
-    m_deleteAction->setEnabled(hasSelection);
+    bool folderSelected = selectedFolderId() != -1;
+    m_deleteAction->setEnabled(hasSelection || folderSelected);
+    m_renameFolderAction->setEnabled(folderSelected);
+    m_newFolderAction->setEnabled(!inTrashView());
     m_detailsAction->setEnabled(hasSelection);
     m_saveAction->setEnabled(m_editor->isModified() && hasSelection);
     m_copyAction->setEnabled(hasContent);

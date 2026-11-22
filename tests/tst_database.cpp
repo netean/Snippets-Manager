@@ -413,6 +413,80 @@ private slots:
         QVERIFY(!db.snippet(id).isValid());
     }
 
+    void foldersHoldSnippetsAndMoveUpWhenDeleted()
+    {
+        Database& db = Database::instance();
+        QVERIFY(db.createDatabase(m_dir.filePath("folders.db")));
+        QString error;
+        int work = db.addFolder("Work", -1, &error);
+        QVERIFY2(work != -1, qPrintable(error));
+        int scripts = db.addFolder(" Scripts/Shell ", work, &error);
+        QVERIFY(scripts != -1);
+        QCOMPARE(db.folderPath(scripts), QString("Work/Scripts-Shell"));
+
+        // Names are unique among siblings, ignoring case
+        QVERIFY(db.addFolder("work", -1, &error) == -1);
+        QVERIFY(error.contains("already"));
+        QVERIFY(db.addFolder("   ", -1, &error) == -1);
+        QVERIFY(db.addFolder("Work", scripts) != -1);  // fine elsewhere
+
+        Snippet snippet;
+        snippet.title = "deploy";
+        snippet.folderId = scripts;
+        int id = db.addSnippet(snippet);
+        QCOMPARE(db.snippet(id).folderId, scripts);
+        QCOMPARE(db.snippet(id).folderPath, QString("Work/Scripts-Shell"));
+        QCOMPARE(db.snippets().value(0).folderPath, QString("Work/Scripts-Shell"));
+
+        // Saving the snippet's other fields doesn't move it
+        Snippet saved = db.snippet(id);
+        saved.folderId = -1;
+        saved.title = "deploy 2";
+        QVERIFY(db.updateSnippet(saved));
+        QCOMPARE(db.snippet(id).folderId, scripts);
+
+        QVERIFY(db.renameFolder(scripts, "Shell", &error));
+        QVERIFY(!db.renameFolder(scripts, "", &error));
+
+        // A folder can't go inside itself or its own subfolder
+        QVERIFY(!db.moveFolder(work, scripts, &error));
+        QVERIFY(error.contains("itself"));
+        QVERIFY(!db.moveFolder(work, work, &error));
+
+        // Deleting Work moves Shell (and its snippet) up to the top level
+        QVERIFY(db.deleteFolder(work, &error));
+        QCOMPARE(db.folderPath(scripts), QString("Shell"));
+        QCOMPARE(db.snippet(id).folderId, scripts);
+        QVERIFY(db.deleteFolder(scripts, &error));
+        QCOMPARE(db.snippet(id).folderId, -1);
+
+        QVERIFY(db.moveSnippetToFolder(id, db.folderForPath("A/B", true)));
+        QCOMPARE(db.snippet(id).folderPath, QString("A/B"));
+        QCOMPARE(db.folderForPath("a/b", false), db.snippet(id).folderId);
+        QCOMPARE(db.folderForPath("A/missing", false), -1);
+    }
+
+    void upgradesVersion2Database()
+    {
+        QString path = m_dir.filePath("v2.db");
+        makeDatabase(path, {QString(V1Schema).replace("modified DATETIME DEFAULT CURRENT_TIMESTAMP)",
+                                                      "modified DATETIME DEFAULT CURRENT_TIMESTAMP, "
+                                                      "format TEXT NOT NULL DEFAULT 'plain', language TEXT NOT NULL DEFAULT '', "
+                                                      "deleted_at DATETIME)"),
+                            "CREATE TABLE tags (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE COLLATE NOCASE)",
+                            "CREATE TABLE snippet_tags (snippet_id INTEGER NOT NULL, tag_id INTEGER NOT NULL, PRIMARY KEY (snippet_id, tag_id))",
+                            "INSERT INTO snippets (title, content) VALUES ('kept', 'x')",
+                            "PRAGMA user_version = 2"});
+        Database& db = Database::instance();
+        QString error;
+        QVERIFY2(db.openDatabase(path, &error), qPrintable(error));
+        QVERIFY(QFile::exists(m_dir.filePath("v2-v2-backup.db")));
+        QVERIFY(db.takeUpgradeNotice().contains("folders"));
+        QCOMPARE(db.snippets().size(), 1);
+        QCOMPARE(db.snippets().value(0).folderId, -1);
+        QVERIFY(db.addFolder("New", -1) != -1);
+    }
+
 private:
     static QList<Snippet> search(const QString& term)
     {

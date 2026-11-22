@@ -190,7 +190,7 @@ bool Database::prepareSchema(QString* errorMessage)
         m_upgradeNotice = QString("Your snippets database was upgraded for Snippet Manager %1. "
                                   "A copy of it as it was before the upgrade has been saved to:\n\n%2\n\n"
                                   "Older versions of Snippet Manager can still open the upgraded database, but they "
-                                  "won't show tags or formatting, and they show snippets that are in the trash.")
+                                  "won't show tags, folders or formatting, and they show snippets that are in the trash.")
                               .arg(QString(APP_VERSION), QDir::toNativeSeparators(backup));
     }
 
@@ -327,14 +327,15 @@ bool Database::upgradeSchema(int fromVersion, QString* errorMessage)
     QSqlQuery query(m_db);
     QStringList statements;
 
-    if (fromVersion < 2) {
-        // Only add the columns that are missing, in case an earlier upgrade was interrupted
-        QStringList columns;
-        if (query.exec("PRAGMA table_info(snippets)")) {
-            while (query.next()) {
-                columns.append(query.value(1).toString());
-            }
+    // Only add the columns that are missing, in case an earlier upgrade was interrupted
+    QStringList columns;
+    if (query.exec("PRAGMA table_info(snippets)")) {
+        while (query.next()) {
+            columns.append(query.value(1).toString());
         }
+    }
+
+    if (fromVersion < 2) {
         if (!columns.contains("format")) {
             statements << "ALTER TABLE snippets ADD COLUMN format TEXT NOT NULL DEFAULT 'plain'";
         }
@@ -350,6 +351,14 @@ bool Database::upgradeSchema(int fromVersion, QString* errorMessage)
                       "snippet_id INTEGER NOT NULL REFERENCES snippets(id) ON DELETE CASCADE, "
                       "tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE, "
                       "PRIMARY KEY (snippet_id, tag_id))";
+    }
+    if (fromVersion < 3) {
+        statements << "CREATE TABLE IF NOT EXISTS folders ("
+                      "id INTEGER PRIMARY KEY, name TEXT NOT NULL, "
+                      "parent_id INTEGER REFERENCES folders(id) ON DELETE CASCADE)";
+        if (!columns.contains("folder_id")) {
+            statements << "ALTER TABLE snippets ADD COLUMN folder_id INTEGER REFERENCES folders(id) ON DELETE SET NULL";
+        }
     }
     statements << QString("PRAGMA user_version = %1").arg(SchemaVersion);
 
@@ -472,7 +481,7 @@ bool Database::exec(QSqlQuery& query, QString* errorMessage)
 // Reading snippets
 // ---------------------------------------------------------------------------
 
-static const char *SnippetColumns = "s.id, s.title, s.content, s.format, s.language, s.created, s.modified, s.deleted_at";
+static const char *SnippetColumns = "s.id, s.title, s.content, s.format, s.language, s.created, s.modified, s.deleted_at, s.folder_id";
 
 static QString formatName(Snippet::Format format)
 {
@@ -515,6 +524,7 @@ Snippet Database::readSnippet(const QSqlQuery& query)
     snippet.created = fromSqlTime(query.value(5));
     snippet.modified = fromSqlTime(query.value(6));
     snippet.deleted = fromSqlTime(query.value(7));
+    snippet.folderId = query.value(8).isNull() ? -1 : query.value(8).toInt();
     return snippet;
 }
 
@@ -615,10 +625,12 @@ QList<Snippet> Database::snippets(const SnippetFilter& filter, SortOrder order)
     }
 
     QHash<int, QStringList> tags = readAllTags();
+    QHash<int, QString> paths = folderPaths();
     QList<Snippet> result;
     while (query.next()) {
         Snippet snippet = readSnippet(query);
         snippet.tags = tags.value(snippet.id);
+        snippet.folderPath = paths.value(snippet.folderId);
         result.append(snippet);
     }
     return result;
@@ -634,6 +646,7 @@ Snippet Database::snippet(int id)
     }
     Snippet snippet = readSnippet(query);
     snippet.tags = readAllTags().value(id);
+    snippet.folderPath = folderPath(snippet.folderId);
     return snippet;
 }
 
@@ -732,7 +745,16 @@ bool Database::importSnippets(const QList<Snippet>& snippets, int* added, int* s
             continue;
         }
         existing.finish();
-        int id = insertSnippet(snippet, errorMessage);
+        Snippet placed = snippet;
+        if (placed.folderId <= 0 && !placed.folderPath.isEmpty()) {
+            placed.folderId = folderForPath(placed.folderPath, true, errorMessage);
+            if (placed.folderId == -1) {
+                m_db.rollback();
+                *added = 0;
+                return false;
+            }
+        }
+        int id = insertSnippet(placed, errorMessage);
         if (id == -1) {
             m_db.rollback();
             *added = 0;
@@ -753,8 +775,8 @@ bool Database::importSnippets(const QList<Snippet>& snippets, int* added, int* s
 int Database::insertSnippet(const Snippet& snippet, QString* errorMessage)
 {
     QSqlQuery query(m_db);
-    query.prepare("INSERT INTO snippets (title, content, format, language, created, modified) "
-                  "VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))");
+    query.prepare("INSERT INTO snippets (title, content, format, language, created, modified, folder_id) "
+                  "VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP), ?)");
     query.addBindValue(text(snippet.title));
     query.addBindValue(text(snippet.content));
     query.addBindValue(formatName(snippet.format));
@@ -762,6 +784,7 @@ int Database::insertSnippet(const Snippet& snippet, QString* errorMessage)
     // Imported snippets keep their dates; new ones get the current time
     query.addBindValue(snippet.created.isValid() ? QVariant(toSqlTime(snippet.created)) : QVariant());
     query.addBindValue(snippet.modified.isValid() ? QVariant(toSqlTime(snippet.modified)) : QVariant());
+    query.addBindValue(snippet.folderId > 0 ? QVariant(snippet.folderId) : QVariant());
     if (!exec(query, errorMessage)) {
         return -1;
     }
@@ -817,6 +840,208 @@ bool Database::updateSnippet(const Snippet& snippet, QString* errorMessage)
     }
     indexSnippet(snippet.id);
     return true;
+}
+
+// ---------------------------------------------------------------------------
+// Folders
+// ---------------------------------------------------------------------------
+
+static QVariant folderValue(int id)
+{
+    return id > 0 ? QVariant(id) : QVariant();
+}
+
+QString Database::cleanFolderName(const QString& name)
+{
+    return QString(name).replace('/', '-').simplified();
+}
+
+QList<Folder> Database::folders()
+{
+    QList<Folder> result;
+    QSqlQuery query(m_db);
+    if (query.exec("SELECT id, name, parent_id FROM folders ORDER BY name COLLATE NOCASE, id")) {
+        while (query.next()) {
+            Folder folder;
+            folder.id = query.value(0).toInt();
+            folder.name = query.value(1).toString();
+            folder.parentId = query.value(2).isNull() ? -1 : query.value(2).toInt();
+            result.append(folder);
+        }
+    }
+    return result;
+}
+
+QHash<int, QString> Database::folderPaths()
+{
+    QHash<int, Folder> byId;
+    for (const Folder& folder : folders()) byId.insert(folder.id, folder);
+    QHash<int, QString> paths;
+    for (const Folder& folder : byId) {
+        QStringList parts;
+        int id = folder.id;
+        // The depth limit guards against a loop in a damaged database
+        for (int depth = 0; id != -1 && byId.contains(id) && depth < 100; ++depth) {
+            parts.prepend(byId[id].name);
+            id = byId[id].parentId;
+        }
+        paths.insert(folder.id, parts.join('/'));
+    }
+    return paths;
+}
+
+QString Database::folderPath(int id)
+{
+    return id > 0 ? folderPaths().value(id) : QString();
+}
+
+bool Database::folderNameTaken(const QString& name, int parentId, int exceptId)
+{
+    QSqlQuery query(m_db);
+    query.prepare("SELECT 1 FROM folders WHERE parent_id IS ? AND name = ? COLLATE NOCASE AND id != ?");
+    query.addBindValue(folderValue(parentId));
+    query.addBindValue(name);
+    query.addBindValue(exceptId);
+    return query.exec() && query.next();
+}
+
+int Database::addFolder(const QString& name, int parentId, QString* errorMessage)
+{
+    QString cleaned = cleanFolderName(name);
+    if (cleaned.isEmpty()) {
+        if (errorMessage) *errorMessage = "The folder needs a name.";
+        return -1;
+    }
+    if (folderNameTaken(cleaned, parentId, -1)) {
+        if (errorMessage) *errorMessage = QString("There's already a folder called '%1' there.").arg(cleaned);
+        return -1;
+    }
+    QSqlQuery query(m_db);
+    query.prepare("INSERT INTO folders (name, parent_id) VALUES (?, ?)");
+    query.addBindValue(cleaned);
+    query.addBindValue(folderValue(parentId));
+    if (!exec(query, errorMessage)) return -1;
+    return query.lastInsertId().toInt();
+}
+
+bool Database::renameFolder(int id, const QString& name, QString* errorMessage)
+{
+    QString cleaned = cleanFolderName(name);
+    if (cleaned.isEmpty()) {
+        if (errorMessage) *errorMessage = "The folder needs a name.";
+        return false;
+    }
+    int parentId = -1;
+    for (const Folder& folder : folders()) {
+        if (folder.id == id) parentId = folder.parentId;
+    }
+    if (folderNameTaken(cleaned, parentId, id)) {
+        if (errorMessage) *errorMessage = QString("There's already a folder called '%1' there.").arg(cleaned);
+        return false;
+    }
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE folders SET name = ? WHERE id = ?");
+    query.addBindValue(cleaned);
+    query.addBindValue(id);
+    return exec(query, errorMessage);
+}
+
+bool Database::deleteFolder(int id, QString* errorMessage)
+{
+    QSqlQuery query(m_db);
+    query.prepare("SELECT parent_id FROM folders WHERE id = ?");
+    query.addBindValue(id);
+    if (!exec(query, errorMessage) || !query.next()) {
+        if (errorMessage && errorMessage->isEmpty()) *errorMessage = "The folder no longer exists.";
+        return false;
+    }
+    QVariant parent = query.value(0);
+    query.finish();
+
+    if (!m_db.transaction()) {
+        if (errorMessage) *errorMessage = m_db.lastError().text();
+        return false;
+    }
+    // Everything in the folder moves up a level, including snippets in the trash
+    for (const char *sql : {"UPDATE snippets SET folder_id = ? WHERE folder_id = ?",
+                            "UPDATE folders SET parent_id = ? WHERE parent_id = ?"}) {
+        query.prepare(sql);
+        query.addBindValue(parent);
+        query.addBindValue(id);
+        if (!exec(query, errorMessage)) {
+            m_db.rollback();
+            return false;
+        }
+    }
+    query.prepare("DELETE FROM folders WHERE id = ?");
+    query.addBindValue(id);
+    if (!exec(query, errorMessage)) {
+        m_db.rollback();
+        return false;
+    }
+    return m_db.commit();
+}
+
+bool Database::moveFolder(int id, int newParentId, QString* errorMessage)
+{
+    QHash<int, Folder> byId;
+    for (const Folder& folder : folders()) byId.insert(folder.id, folder);
+    if (!byId.contains(id) || (newParentId != -1 && !byId.contains(newParentId))) {
+        if (errorMessage) *errorMessage = "The folder no longer exists.";
+        return false;
+    }
+    // A folder can't go inside itself or one of its own subfolders
+    for (int ancestor = newParentId, depth = 0; ancestor != -1 && depth < 100; ++depth) {
+        if (ancestor == id) {
+            if (errorMessage) *errorMessage = "A folder can't be moved into itself.";
+            return false;
+        }
+        ancestor = byId.value(ancestor).parentId;
+    }
+    if (folderNameTaken(byId[id].name, newParentId, id)) {
+        if (errorMessage) *errorMessage = QString("There's already a folder called '%1' there.").arg(byId[id].name);
+        return false;
+    }
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE folders SET parent_id = ? WHERE id = ?");
+    query.addBindValue(folderValue(newParentId));
+    query.addBindValue(id);
+    return exec(query, errorMessage);
+}
+
+bool Database::moveSnippetToFolder(int snippetId, int folderId, QString* errorMessage)
+{
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE snippets SET folder_id = ? WHERE id = ?");
+    query.addBindValue(folderValue(folderId));
+    query.addBindValue(snippetId);
+    if (!exec(query, errorMessage)) return false;
+    if (query.numRowsAffected() == 0) {
+        if (errorMessage) *errorMessage = "The snippet no longer exists.";
+        return false;
+    }
+    return true;
+}
+
+int Database::folderForPath(const QString& path, bool create, QString* errorMessage)
+{
+    int parent = -1;
+    for (const QString& part : path.split('/', Qt::SkipEmptyParts)) {
+        QString name = cleanFolderName(part);
+        if (name.isEmpty()) continue;
+        QSqlQuery query(m_db);
+        query.prepare("SELECT id FROM folders WHERE parent_id IS ? AND name = ? COLLATE NOCASE ORDER BY id LIMIT 1");
+        query.addBindValue(folderValue(parent));
+        query.addBindValue(name);
+        if (query.exec() && query.next()) {
+            parent = query.value(0).toInt();
+            continue;
+        }
+        if (!create) return -1;
+        parent = addFolder(name, parent, errorMessage);
+        if (parent == -1) return -1;
+    }
+    return parent;
 }
 
 bool Database::moveToTrash(int id, QString* errorMessage)
