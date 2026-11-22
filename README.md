@@ -54,6 +54,8 @@ chmod +x SnippetManager-1.3-x86_64.AppImage
 
 The AppImage needs a glibc at least as new as the machine that built it, so build it on the oldest distro you want to support. Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the distro); without it, run it with `--appimage-extract-and-run`.
 
+ -- I do not like Flatpaks so I will never be making a Flatpak for  this 
+
 ## Building manually
 
 ### Prerequisites
