@@ -53,6 +53,8 @@ add_library(snippetcore STATIC
     src/languages.h
     src/richtext.cpp
     src/richtext.h
+    src/importexport.cpp
+    src/importexport.h
     src/mainwindow.cpp
     src/mainwindow.h
     src/settingsdialog.cpp

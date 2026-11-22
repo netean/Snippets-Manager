@@ -43,6 +43,8 @@ private slots:
     void onRestoreSnippet();
     void onUndoDelete();
     void onEmptyTrash();
+    void onImport();
+    void onExport();
     void onAbout();
 
 private:

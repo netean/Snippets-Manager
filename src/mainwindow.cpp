@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "clipboard.h"
 #include "database.h"
+#include "importexport.h"
 #include "messagebox.h"
 #include "settingsdialog.h"
 #include "snippeteditor.h"
@@ -9,6 +10,8 @@
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDir>
+#include <QFileDialog>
+#include <QStandardPaths>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
@@ -253,6 +256,14 @@ void MainWindow::setupMenus()
 {
     QMenu *fileMenu = menuBar()->addMenu("&File");
 
+    QAction *importAction = fileMenu->addAction("&Import...");
+    importAction->setToolTip("Add snippets from a JSON, Markdown or CSV file");
+    connect(importAction, &QAction::triggered, this, &MainWindow::onImport);
+    QAction *exportAction = fileMenu->addAction("&Export...");
+    exportAction->setToolTip("Save snippets to a JSON, Markdown or CSV file");
+    connect(exportAction, &QAction::triggered, this, &MainWindow::onExport);
+    fileMenu->addSeparator();
+
     QAction *settingsAction = fileMenu->addAction("&Settings...");
     settingsAction->setShortcut(QKeySequence::Preferences);
     connect(settingsAction, &QAction::triggered, this, &MainWindow::onShowSettings);
@@ -311,6 +322,102 @@ void MainWindow::onShowDetails()
         details += "\n\nMoved to the trash: " + formatTime(snippet.deleted);
     }
     MessageBox::information(this, "Snippet Details", details);
+}
+
+static const char *ImportFilter = "Snippet files (*.json *.md *.markdown *.csv *.tsv *.txt);;"
+                                  "JSON (*.json);;Markdown (*.md *.markdown);;CSV (*.csv *.tsv *.txt)";
+static const char *ExportJsonFilter = "JSON - everything, best for backups (*.json)";
+static const char *ExportMarkdownFilter = "Markdown - easy to read (*.md)";
+static const char *ExportCsvFilter = "CSV - for spreadsheets (*.csv)";
+static const char *LastFolderKey = "importExport/lastFolder";
+
+void MainWindow::onImport()
+{
+    if (!ensureSaved()) return;
+    QSettings settings;
+    QString startFolder = settings.value(LastFolderKey, QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
+    QString path = QFileDialog::getOpenFileName(this, "Import Snippets", startFolder, ImportFilter);
+    if (path.isEmpty()) return;
+    settings.setValue(LastFolderKey, QFileInfo(path).absolutePath());
+
+    QString error;
+    QList<Snippet> snippets = ImportExport::readFile(path, &error);
+    if (snippets.isEmpty()) {
+        MessageBox::warning(this, "Import Snippets",
+                            QString("No snippets could be imported from '%1'.\n\n%2")
+                                .arg(QDir::toNativeSeparators(path), error));
+        return;
+    }
+    if (!MessageBox::question(this, "Import Snippets",
+                              QString("Import %1 snippet(s) from '%2'?\n\nSnippets with the same title and content "
+                                      "as one you already have are skipped.")
+                                  .arg(snippets.size()).arg(QFileInfo(path).fileName()),
+                              QMessageBox::Yes)) {
+        return;
+    }
+
+    int added = 0, skipped = 0;
+    if (!Database::instance().importSnippets(snippets, &added, &skipped, &error)) {
+        MessageBox::warning(this, "Import Snippets", "The snippets could not be imported. Nothing was changed.\n\n" + error);
+        return;
+    }
+    m_model->refresh();
+    refreshTags();
+    selectSnippet(currentId());
+    QString message = QString("Imported %1 snippet(s)").arg(added);
+    if (skipped > 0) {
+        message += QString(", skipped %1 already here").arg(skipped);
+    }
+    statusBar()->showMessage(message, 8000);
+}
+
+void MainWindow::onExport()
+{
+    if (!ensureSaved()) return;
+
+    // Export what's listed, or everything, if the list is filtered
+    QList<Snippet> all = Database::instance().snippets();
+    QList<Snippet> shown;
+    for (int row = 0; row < m_model->rowCount(); ++row) {
+        shown.append(m_model->getSnippet(row));
+    }
+    QList<Snippet> snippets = all;
+    bool filtered = !inTrashView() && shown.size() != all.size();
+    if (filtered) {
+        QMessageBox box(QMessageBox::Question, "Export Snippets",
+                        "The list is filtered. Which snippets do you want to export?",
+                        QMessageBox::Cancel, this);
+        QPushButton *shownButton = box.addButton(QString("Those Shown (%1)").arg(shown.size()), QMessageBox::AcceptRole);
+        box.addButton(QString("All (%1)").arg(all.size()), QMessageBox::AcceptRole);
+        box.exec();
+        if (box.clickedButton() == box.button(QMessageBox::Cancel)) return;
+        if (box.clickedButton() == shownButton) snippets = shown;
+    }
+    if (snippets.isEmpty()) {
+        MessageBox::information(this, "Export Snippets", "There are no snippets to export.");
+        return;
+    }
+
+    QSettings settings;
+    QString folder = settings.value(LastFolderKey, QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
+    QString selectedFilter = ExportJsonFilter;
+    QString path = QFileDialog::getSaveFileName(this, "Export Snippets", folder + "/snippets.json",
+                                                QString("%1;;%2;;%3").arg(ExportJsonFilter, ExportMarkdownFilter, ExportCsvFilter),
+                                                &selectedFilter);
+    if (path.isEmpty()) return;
+    settings.setValue(LastFolderKey, QFileInfo(path).absolutePath());
+
+    // Use the chosen type's extension if the name doesn't have a supported one
+    if (ImportExport::formatForPath(path) == ImportExport::Format::Unknown) {
+        path += selectedFilter == ExportMarkdownFilter ? ".md" : selectedFilter == ExportCsvFilter ? ".csv" : ".json";
+    }
+
+    QString error;
+    if (!ImportExport::writeFile(path, snippets, &error)) {
+        MessageBox::warning(this, "Export Snippets", "The snippets could not be exported.\n\n" + error);
+        return;
+    }
+    statusBar()->showMessage(QString("Exported %1 snippet(s) to %2").arg(snippets.size()).arg(QDir::toNativeSeparators(path)), 8000);
 }
 
 void MainWindow::onAbout()

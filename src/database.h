@@ -79,6 +79,10 @@ public:
     // Deletes permanently (see moveToTrash)
     bool deleteSnippet(int id, QString* errorMessage = nullptr);
 
+    // Adds snippets in one go, skipping any with the same title and content
+    // as a snippet already there. Nothing is added if any of them fails.
+    bool importSnippets(const QList<Snippet>& snippets, int* added, int* skipped, QString* errorMessage = nullptr);
+
     // The trash: snippets moved there keep everything and can be restored
     bool moveToTrash(int id, QString* errorMessage = nullptr);
     bool restoreFromTrash(int id, QString* errorMessage = nullptr);
@@ -109,6 +113,7 @@ private:
     void indexSnippet(int id);
     void unindexSnippet(int id);
     bool writeTags(int id, const QStringList& tags);
+    int insertSnippet(const Snippet& snippet, QString* errorMessage);
     QHash<int, QStringList> readAllTags();
     bool exec(QSqlQuery& query, QString* errorMessage);
     static void restrictPermissions(const QString& path);

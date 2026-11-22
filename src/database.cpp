@@ -700,7 +700,58 @@ int Database::addSnippet(const Snippet& snippet, QString* errorMessage)
         if (errorMessage) *errorMessage = m_db.lastError().text();
         return -1;
     }
+    int id = insertSnippet(snippet, errorMessage);
+    if (id == -1) {
+        m_db.rollback();
+        return -1;
+    }
+    if (!m_db.commit()) {
+        if (errorMessage) *errorMessage = m_db.lastError().text();
+        return -1;
+    }
+    indexSnippet(id);
+    return id;
+}
 
+bool Database::importSnippets(const QList<Snippet>& snippets, int* added, int* skipped, QString* errorMessage)
+{
+    *added = 0;
+    *skipped = 0;
+    if (!m_db.transaction()) {
+        if (errorMessage) *errorMessage = m_db.lastError().text();
+        return false;
+    }
+    QList<int> ids;
+    QSqlQuery existing(m_db);
+    for (const Snippet& snippet : snippets) {
+        existing.prepare("SELECT 1 FROM snippets WHERE title = ? AND content = ? AND deleted_at IS NULL");
+        existing.addBindValue(text(snippet.title));
+        existing.addBindValue(text(snippet.content));
+        if (existing.exec() && existing.next()) {
+            ++*skipped;
+            continue;
+        }
+        existing.finish();
+        int id = insertSnippet(snippet, errorMessage);
+        if (id == -1) {
+            m_db.rollback();
+            *added = 0;
+            return false;
+        }
+        ids.append(id);
+    }
+    if (!m_db.commit()) {
+        if (errorMessage) *errorMessage = m_db.lastError().text();
+        return false;
+    }
+    for (int id : ids) indexSnippet(id);
+    *added = ids.size();
+    return true;
+}
+
+// Adds a snippet within the caller's transaction
+int Database::insertSnippet(const Snippet& snippet, QString* errorMessage)
+{
     QSqlQuery query(m_db);
     query.prepare("INSERT INTO snippets (title, content, format, language, created, modified) "
                   "VALUES (?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))");
@@ -712,21 +763,14 @@ int Database::addSnippet(const Snippet& snippet, QString* errorMessage)
     query.addBindValue(snippet.created.isValid() ? QVariant(toSqlTime(snippet.created)) : QVariant());
     query.addBindValue(snippet.modified.isValid() ? QVariant(toSqlTime(snippet.modified)) : QVariant());
     if (!exec(query, errorMessage)) {
-        m_db.rollback();
         return -1;
     }
 
     int id = query.lastInsertId().toInt();
     if (!writeTags(id, snippet.tags)) {
         if (errorMessage) *errorMessage = "The snippet's tags could not be saved.";
-        m_db.rollback();
         return -1;
     }
-    if (!m_db.commit()) {
-        if (errorMessage) *errorMessage = m_db.lastError().text();
-        return -1;
-    }
-    indexSnippet(id);
     return id;
 }
 
