@@ -40,6 +40,7 @@ private slots:
     void onShowSettings();
     void onDatabaseChanged();
     void onAbout();
+    void onShowDetails();
 
 private:
     void setupUI();
@@ -83,6 +84,7 @@ private:
     QAction *m_copyAction;
     QAction *m_deleteAction;
     QAction *m_findAction;
+    QAction *m_detailsAction;
 
     SnippetModel *m_model;
     int m_currentSnippetId;

@@ -14,6 +14,7 @@
 #include <QAction>
 #include <QMouseEvent>
 #include <QKeyEvent>
+#include <QLocale>
 #include <QSettings>
 #include <QIcon>
 #include <QDebug>
@@ -186,6 +187,23 @@ void MainWindow::setupActions()
     m_snippetList->addAction(m_deleteAction);
     connect(m_deleteAction, &QAction::triggered, this, &MainWindow::onDeleteSnippet);
 
+    m_detailsAction = new QAction("Snippet &Details...", this);
+    m_detailsAction->setShortcut(QKeySequence("Alt+Return"));
+    connect(m_detailsAction, &QAction::triggered, this, &MainWindow::onShowDetails);
+
+    // Right-click menu for the snippet list
+    m_snippetList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_snippetList, &QWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        if (!m_snippetList->indexAt(pos).isValid() || m_currentSnippetId == -1) return;
+        QMenu menu(this);
+        menu.addAction(m_copyAction);
+        menu.addAction(m_editAction);
+        menu.addAction(m_detailsAction);
+        menu.addSeparator();
+        menu.addAction(m_deleteAction);
+        menu.exec(m_snippetList->viewport()->mapToGlobal(pos));
+    });
+
     m_findAction = new QAction("&Find", this);
     m_findAction->setShortcut(QKeySequence::Find);
     connect(m_findAction, &QAction::triggered, this, [this]() {
@@ -214,6 +232,7 @@ void MainWindow::setupMenus()
     editMenu->addAction(m_saveAction);
     editMenu->addSeparator();
     editMenu->addAction(m_copyAction);
+    editMenu->addAction(m_detailsAction);
     editMenu->addAction(m_deleteAction);
     editMenu->addSeparator();
     editMenu->addAction(m_findAction);
@@ -221,6 +240,31 @@ void MainWindow::setupMenus()
     QMenu *helpMenu = menuBar()->addMenu("&Help");
     QAction *aboutAction = helpMenu->addAction("&About Snippet Manager");
     connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);
+}
+
+void MainWindow::onShowDetails()
+{
+    if (m_currentSnippetId == -1) return;
+
+    // Use the stored snippet, so the details match what's saved
+    Snippet snippet = Database::instance().snippet(m_currentSnippetId);
+    QLocale locale;
+    auto formatTime = [&locale](const QDateTime &time) {
+        return time.isValid() ? locale.toString(time, QLocale::LongFormat) : QString("Unknown");
+    };
+
+    QString type = snippet.isRich() ? "Rich text"
+                   : snippet.language.isEmpty() ? "Plain text" : snippet.language;
+    QString plain = snippet.content;
+    QString details = QString("Title: %1\n\nCreated: %2\nModified: %3\n\nType: %4\nTags: %5\nSize: %6 characters, %7 lines")
+                          .arg(snippet.title, formatTime(snippet.created), formatTime(snippet.modified), type,
+                               snippet.tags.isEmpty() ? QString("None") : snippet.tags.join(", "))
+                          .arg(plain.size())
+                          .arg(plain.isEmpty() ? 0 : plain.count('\n') + 1);
+    if (snippet.inTrash()) {
+        details += "\n\nMoved to the trash: " + formatTime(snippet.deleted);
+    }
+    MessageBox::information(this, "Snippet Details", details);
 }
 
 void MainWindow::onAbout()
@@ -520,6 +564,7 @@ void MainWindow::updateButtonStates()
     
     m_editAction->setEnabled(hasSelection && !isContentEditable());
     m_deleteAction->setEnabled(hasSelection);
+    m_detailsAction->setEnabled(hasSelection);
     m_saveAction->setEnabled(m_isModified && hasSelection);
     m_copyAction->setEnabled(hasContent);
     m_editButton->setEnabled(m_editAction->isEnabled());
