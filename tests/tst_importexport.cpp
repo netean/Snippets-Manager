@@ -148,7 +148,9 @@ private slots:
             QString path = dir.filePath(name);
             QString error;
             QVERIFY2(writeFile(path, sampleSnippets(), &error), qPrintable(error));
+#ifdef Q_OS_UNIX
             QCOMPARE(int(QFile::permissions(path)) & 0x0FFF, 0x0600);
+#endif
             compareSnippets(readFile(path, &error), sampleSnippets(), true);
         }
         QString error;

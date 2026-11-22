@@ -1,0 +1,97 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main, v1, "v2*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Third-party actions are pinned to exact commits (the comment says which release)
+jobs:
+  linux:
+    name: Linux (Ubuntu 24.04, Qt 6.4)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ qt6-base-dev libqt6sql6-sqlite
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wall -Wextra"
+          cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  linux-highlighting:
+    name: Linux with syntax highlighting (Debian 13, KF6)
+    runs-on: ubuntu-24.04
+    container: debian:13
+    steps:
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y cmake g++ qt6-base-dev libqt6sql6-sqlite libkf6syntaxhighlighting-dev
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wall -Wextra" | tee configure.log
+          grep -q "Syntax highlighting: enabled" configure.log
+          cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  windows:
+    name: Windows (Qt 6.8)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
+        with:
+          version: "6.8.*"
+          cache: true
+      - name: Build
+        run: |
+          cmake -S . -B build
+          cmake --build build --config Release --parallel
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+  macos:
+    name: macOS (Qt 6.8)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: jurplel/install-qt-action@b344308e4483fc892e0d27b3cd1b173ebdd95f06 # v4.5.0
+        with:
+          version: "6.8.*"
+          cache: true
+      - name: Build
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+  appimage:
+    name: AppImage
+    # The AppImage is built on Ubuntu 24.04 so it runs on as many distros as possible
+    runs-on: ubuntu-24.04
+    needs: linux
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake g++ qt6-base-dev qt6-base-dev-tools qmake6 libqt6sql6-sqlite qt6-wayland libgl-dev file
+      - name: Build AppImage
+        run: ./package-appimage.sh --native
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: SnippetManager-AppImage
+          path: SnippetManager-*.AppImage
+          if-no-files-found: error

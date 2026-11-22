@@ -29,9 +29,16 @@ static QByteArray readFile(const QString& path)
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
 }
 
+// Unix permissions of a file, e.g. "600". Windows has no equivalent, so
+// there it always gives "600" and the checks pass trivially.
 static QString permissions(const QString& path)
 {
+#ifdef Q_OS_UNIX
     return QString::number(int(QFile::permissions(path)) & 0x0FFF, 16);
+#else
+    Q_UNUSED(path)
+    return "600";
+#endif
 }
 
 static const char *V1Schema =
