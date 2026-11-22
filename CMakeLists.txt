@@ -9,6 +9,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Qt 6.4 is the oldest supported version (Ubuntu 24.04, which the AppImage is built on)
 find_package(Qt6 6.4 REQUIRED COMPONENTS Core Gui Widgets Sql Network)
 qt_standard_project_setup()
+# qt_standard_project_setup() turns on moc and uic, but not rcc, which
+# compiles the icons in resources.qrc into the app
+set(CMAKE_AUTORCC ON)
 
 include(GNUInstallDirs)
 
