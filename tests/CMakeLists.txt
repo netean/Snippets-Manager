@@ -14,3 +14,4 @@ endfunction()
 
 add_snippet_test(tst_database)
 add_snippet_test(tst_mainwindow)
+add_snippet_test(tst_richtext)

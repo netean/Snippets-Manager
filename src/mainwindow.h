@@ -57,7 +57,6 @@ private:
     void loadSnippet(int id);
     void selectSnippet(int id);
     void setContentEditable(bool editable);
-    void copyToClipboard(const QString &text);
     bool copyOnSelect() const;
     int currentId() const;
 

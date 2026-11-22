@@ -1,11 +1,11 @@
 #include "mainwindow.h"
+#include "clipboard.h"
 #include "database.h"
 #include "messagebox.h"
 #include "settingsdialog.h"
 #include "snippeteditor.h"
 #include <QAction>
 #include <QApplication>
-#include <QClipboard>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QDir>
@@ -18,7 +18,6 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
-#include <QMimeData>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QSettings>
@@ -160,6 +159,7 @@ void MainWindow::setupUI()
 
     QHBoxLayout *rightButtonLayout = new QHBoxLayout;
     m_saveButton = new QPushButton("Save");
+    m_saveButton->setObjectName("saveButton");
     m_copyButton = new QPushButton("Copy");
     rightButtonLayout->addWidget(m_saveButton);
     rightButtonLayout->addWidget(m_copyButton);
@@ -324,12 +324,13 @@ bool MainWindow::eventFilter(QObject *watched, QEvent *event)
         QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
         if (mouseEvent->button() == Qt::LeftButton && currentId() != -1 && !m_editor->isContentEditable()
             && copyOnSelect()) {
-            QString selected = m_editor->selectedText();
+            QTextDocumentFragment selected = m_editor->selection();
             if (!selected.isEmpty()) {
-                copyToClipboard(selected);
+                QString plain = selected.toPlainText();
+                Clipboard::copy(plain, m_editor->showsFormatting() ? selected.toHtml() : QString());
                 statusBar()->showMessage("Selected text copied to clipboard", 2000);
             } else if (!m_editor->plainText().isEmpty()) {
-                copyToClipboard(m_editor->plainText());
+                Clipboard::copySnippet(m_editor->snippet());
                 statusBar()->showMessage("Content copied to clipboard", 2000);
             }
         }
@@ -356,18 +357,6 @@ void MainWindow::closeEvent(QCloseEvent *event)
 bool MainWindow::copyOnSelect() const
 {
     return QSettings().value(SettingsKeys::CopyOnSelect, true).toBool();
-}
-
-void MainWindow::copyToClipboard(const QString &text)
-{
-    auto *mimeData = new QMimeData;
-    mimeData->setText(text);
-    if (QSettings().value(SettingsKeys::HideFromHistory, false).toBool()) {
-        // Tells clipboard managers that follow this convention (such as KDE's
-        // Klipper) not to store the text in their history
-        mimeData->setData("x-kde-passwordManagerHint", "secret");
-    }
-    QApplication::clipboard()->setMimeData(mimeData);
 }
 
 void MainWindow::setContentEditable(bool editable)
@@ -479,7 +468,7 @@ void MainWindow::onSelectionChanged(const QModelIndex &current)
 
     if (currentId() != -1) {
         if (copyOnSelect()) {
-            copyToClipboard(m_editor->plainText());
+            Clipboard::copySnippet(m_editor->snippet());
             statusBar()->showMessage("Content copied to clipboard - Rename using the title field, click 'Edit' to change the content", 4000);
         } else {
             statusBar()->showMessage("Rename using the title field, click 'Edit' to change the content", 4000);
@@ -581,7 +570,7 @@ void MainWindow::onDeleteSnippet()
 
 void MainWindow::onCopySnippet()
 {
-    copyToClipboard(m_editor->plainText());
+    Clipboard::copySnippet(m_editor->snippet());
     statusBar()->showMessage("Content copied to clipboard", 2000);
 }
 
@@ -595,6 +584,7 @@ void MainWindow::onShowSettings()
     SettingsDialog dialog(this);
     dialog.setSavePendingChanges([this]() { return ensureSaved(); });
     connect(&dialog, &SettingsDialog::clipboardSettingsChanged, this, &MainWindow::updateModeLabel);
+    connect(&dialog, &SettingsDialog::editorSettingsChanged, m_editor, &SnippetEditor::applySettings);
     connect(&dialog, &SettingsDialog::databaseChanged, this, &MainWindow::onDatabaseChanged);
     dialog.exec();
 }

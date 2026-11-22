@@ -1,5 +1,7 @@
 #include "database.h"
 #include "mainwindow.h"
+#include "richtext.h"
+#include <QMimeData>
 #include <QApplication>
 #include <QClipboard>
 #include <QComboBox>
@@ -138,6 +140,107 @@ private slots:
         QCOMPARE(m_list->model()->rowCount(), 0);
     }
 
+    void richTextFormattingIsSavedAsMarkdown()
+    {
+        Database::instance().addSnippet("Note", "");
+        reload();
+        selectRow(0);
+        QTest::keyClick(m_window, Qt::Key_E, Qt::ControlModifier);
+        m_type->setCurrentIndex(m_type->findData("rich"));
+        QVERIFY(m_window->findChild<QWidget *>("formatBar")->isVisible());
+
+        m_content->setFocus();
+        QTest::keyClicks(m_content, "plain ");
+        QTest::keyClick(m_content, Qt::Key_B, Qt::ControlModifier);
+        QTest::keyClicks(m_content, "bold");
+        QTest::keyClick(m_window, Qt::Key_S, Qt::ControlModifier);
+
+        Snippet saved = Database::instance().snippets().value(0);
+        QCOMPARE(saved.format, Snippet::RichText);
+        QCOMPARE(saved.content, QString("plain **bold**"));
+
+        // Copying gives formatted and plain versions
+        QTest::keyClick(m_window, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
+        const QMimeData *copied = QApplication::clipboard()->mimeData();
+        QCOMPARE(copied->text(), QString("plain bold"));
+        QVERIFY(copied->hasHtml());
+        QVERIFY(copied->html().contains("font-weight"));
+    }
+
+    void plainTextModeShowsMarkdownAndKeepsIt()
+    {
+        Snippet rich;
+        rich.title = "Rich";
+        rich.format = Snippet::RichText;
+        rich.content = "- one\n- **two**";
+        Database::instance().addSnippet(rich);
+        QSettings().setValue("editor/richText", false);
+        reload();
+        selectRow(0);
+        QCOMPARE(m_content->toPlainText(), rich.content);
+        QCOMPARE(QApplication::clipboard()->text(), rich.content);
+
+        // Editing the title doesn't change the content or its type
+        m_title->setText("Renamed");
+        QTest::keyClick(m_window, Qt::Key_S, Qt::ControlModifier);
+        Snippet saved = Database::instance().snippets().value(0);
+        QCOMPARE(saved.title, QString("Renamed"));
+        QCOMPARE(saved.format, Snippet::RichText);
+        QCOMPARE(saved.content, rich.content);
+        QVERIFY(!m_window->findChild<QWidget *>("formatBar")->isVisible());
+    }
+
+    void removingFormattingAsksFirst()
+    {
+        Snippet rich;
+        rich.title = "Rich";
+        rich.format = Snippet::RichText;
+        rich.content = "**important**";
+        Database::instance().addSnippet(rich);
+        reload();
+        selectRow(0);
+        QTest::keyClick(m_window, Qt::Key_E, Qt::ControlModifier);
+
+        answerNextQuestion(QMessageBox::No);
+        m_type->setCurrentIndex(m_type->findData("plain"));
+        QCOMPARE(m_type->currentData().toString(), QString("rich"));
+
+        answerNextQuestion(QMessageBox::Yes);
+        m_type->setCurrentIndex(m_type->findData("plain"));
+        clickSave();  // the offscreen platform doesn't reactivate the window for Ctrl+S after a dialog
+        Snippet saved = Database::instance().snippets().value(0);
+        QCOMPARE(saved.format, Snippet::PlainText);
+        QCOMPARE(saved.content, QString("important"));
+    }
+
+    void plainTextBecomesRichTextLiterally()
+    {
+        Database::instance().addSnippet("Stars", "*not italic* # not a heading");
+        reload();
+        selectRow(0);
+        QTest::keyClick(m_window, Qt::Key_E, Qt::ControlModifier);
+        m_type->setCurrentIndex(m_type->findData("rich"));
+        QCOMPARE(m_content->toPlainText(), QString("*not italic* # not a heading"));
+        QTest::keyClick(m_window, Qt::Key_S, Qt::ControlModifier);
+        Snippet saved = Database::instance().snippets().value(0);
+        QCOMPARE(saved.format, Snippet::RichText);
+        QCOMPARE(RichText::toPlainText(saved.content), QString("*not italic* # not a heading"));
+    }
+
+    void codeLanguageIsSaved()
+    {
+        Database::instance().addSnippet("Script", "print('hi')");
+        reload();
+        selectRow(0);
+        QTest::keyClick(m_window, Qt::Key_E, Qt::ControlModifier);
+        m_type->setCurrentIndex(m_type->findData("code:Python"));
+        QTest::keyClick(m_window, Qt::Key_S, Qt::ControlModifier);
+        Snippet saved = Database::instance().snippets().value(0);
+        QCOMPARE(saved.format, Snippet::PlainText);
+        QCOMPARE(saved.language, QString("Python"));
+        QCOMPARE(saved.content, QString("print('hi')"));
+    }
+
 private:
     void createWindow()
     {
@@ -149,7 +252,15 @@ private:
         m_tags = m_window->findChild<QLineEdit *>("tagEdit");
         m_content = m_window->findChild<QTextEdit *>("contentEdit");
         m_tagFilter = m_window->findChild<QComboBox *>("tagFilter");
-        QVERIFY(m_list && m_title && m_tags && m_content && m_tagFilter);
+        m_type = m_window->findChild<QComboBox *>("typeCombo");
+        QVERIFY(m_list && m_title && m_tags && m_content && m_tagFilter && m_type);
+    }
+
+    void clickSave()
+    {
+        QPushButton *saveButton = m_window->findChild<QPushButton *>("saveButton");
+        QVERIFY(saveButton);
+        saveButton->click();
     }
 
     // Recreates the window so it shows snippets added directly to the database
@@ -182,6 +293,7 @@ private:
     QLineEdit *m_tags = nullptr;
     QTextEdit *m_content = nullptr;
     QComboBox *m_tagFilter = nullptr;
+    QComboBox *m_type = nullptr;
 };
 
 QTEST_MAIN(TestMainWindow)

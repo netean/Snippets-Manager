@@ -47,6 +47,12 @@ add_library(snippetcore STATIC
     src/snippeteditor.h
     src/tagedit.cpp
     src/tagedit.h
+    src/clipboard.cpp
+    src/clipboard.h
+    src/languages.cpp
+    src/languages.h
+    src/richtext.cpp
+    src/richtext.h
     src/mainwindow.cpp
     src/mainwindow.h
     src/settingsdialog.cpp

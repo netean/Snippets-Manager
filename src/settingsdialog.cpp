@@ -6,7 +6,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
-#include <QGroupBox>
+#include <QTabWidget>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QDialogButtonBox>
@@ -23,10 +23,44 @@ SettingsDialog::SettingsDialog(QWidget *parent)
 {
     setWindowTitle("Settings");
 
-    QGroupBox *databaseGroup = new QGroupBox("Database");
-    QVBoxLayout *groupLayout = new QVBoxLayout(databaseGroup);
+    QSettings settings;
 
-    groupLayout->addWidget(new QLabel("Current database location:"));
+    // Editor
+    QWidget *editorPage = new QWidget;
+    QVBoxLayout *editorLayout = new QVBoxLayout(editorPage);
+    QCheckBox *richTextCheck = new QCheckBox("Rich text editing");
+    richTextCheck->setObjectName("richTextCheck");
+    richTextCheck->setToolTip("Lets snippets have formatting such as bold, italics and lists, with a formatting toolbar");
+    richTextCheck->setChecked(settings.value(SettingsKeys::RichText, true).toBool());
+    editorLayout->addWidget(richTextCheck);
+    QLabel *richTextHelp = new QLabel("When this is off, everything is plain text: the formatting toolbar is hidden, "
+                                      "and rich text snippets are shown and copied as their Markdown source. "
+                                      "Their formatting is kept, so turning this back on restores it.");
+    richTextHelp->setWordWrap(true);
+    richTextHelp->setContentsMargins(20, 0, 0, 0);
+    editorLayout->addWidget(richTextHelp);
+    editorLayout->addStretch();
+
+    // Clipboard
+    QWidget *clipboardPage = new QWidget;
+    QVBoxLayout *clipboardLayout = new QVBoxLayout(clipboardPage);
+
+    QCheckBox *copyOnSelectCheck = new QCheckBox("Copy a snippet when it's selected or its content is clicked");
+    copyOnSelectCheck->setToolTip("When off, snippets are only copied with the Copy button");
+    copyOnSelectCheck->setChecked(settings.value(SettingsKeys::CopyOnSelect, true).toBool());
+    clipboardLayout->addWidget(copyOnSelectCheck);
+
+    QCheckBox *hideFromHistoryCheck = new QCheckBox("Keep copied snippets out of clipboard history");
+    hideFromHistoryCheck->setToolTip("Marks copied snippets as sensitive, so clipboard managers that respect this "
+                                     "(such as KDE's Klipper) don't save them. Useful if you store passwords or tokens.");
+    hideFromHistoryCheck->setChecked(settings.value(SettingsKeys::HideFromHistory, false).toBool());
+    clipboardLayout->addWidget(hideFromHistoryCheck);
+    clipboardLayout->addStretch();
+
+    // Database
+    QWidget *databasePage = new QWidget;
+    QVBoxLayout *databaseLayout = new QVBoxLayout(databasePage);
+    databaseLayout->addWidget(new QLabel("Current database location:"));
 
     QHBoxLayout *pathLayout = new QHBoxLayout;
     m_pathEdit = new QLineEdit;
@@ -36,7 +70,7 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     showFolderButton->setToolTip("Open the folder containing the database");
     pathLayout->addWidget(m_pathEdit);
     pathLayout->addWidget(showFolderButton);
-    groupLayout->addLayout(pathLayout);
+    databaseLayout->addLayout(pathLayout);
 
     QHBoxLayout *actionLayout = new QHBoxLayout;
     QPushButton *moveButton = new QPushButton("Move...");
@@ -49,31 +83,24 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     actionLayout->addWidget(openButton);
     actionLayout->addWidget(createButton);
     actionLayout->addStretch();
-    groupLayout->addLayout(actionLayout);
+    databaseLayout->addLayout(actionLayout);
+    databaseLayout->addStretch();
 
-    QGroupBox *clipboardGroup = new QGroupBox("Clipboard");
-    QVBoxLayout *clipboardLayout = new QVBoxLayout(clipboardGroup);
-    QSettings settings;
-
-    QCheckBox *copyOnSelectCheck = new QCheckBox("Copy a snippet when it's selected or its content is clicked");
-    copyOnSelectCheck->setToolTip("When off, snippets are only copied with the Copy button");
-    copyOnSelectCheck->setChecked(settings.value(SettingsKeys::CopyOnSelect, true).toBool());
-    clipboardLayout->addWidget(copyOnSelectCheck);
-
-    QCheckBox *hideFromHistoryCheck = new QCheckBox("Keep copied snippets out of clipboard history");
-    hideFromHistoryCheck->setToolTip("Marks copied snippets as sensitive, so clipboard managers that respect this "
-                                     "(such as KDE's Klipper) don't save them. Useful if you store passwords or tokens.");
-    hideFromHistoryCheck->setChecked(settings.value(SettingsKeys::HideFromHistory, false).toBool());
-    clipboardLayout->addWidget(hideFromHistoryCheck);
+    m_tabs = new QTabWidget;
+    m_tabs->addTab(editorPage, "Editor");
+    m_tabs->addTab(clipboardPage, "Clipboard");
+    m_tabs->addTab(databasePage, "Database");
 
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
-    mainLayout->addWidget(databaseGroup);
-    mainLayout->addWidget(clipboardGroup);
-    mainLayout->addStretch();
+    mainLayout->addWidget(m_tabs);
     mainLayout->addWidget(buttonBox);
 
+    connect(richTextCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        QSettings().setValue(SettingsKeys::RichText, checked);
+        emit editorSettingsChanged();
+    });
     connect(showFolderButton, &QPushButton::clicked, this, [this]() {
         QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(m_pathEdit->text()).absolutePath()));
     });

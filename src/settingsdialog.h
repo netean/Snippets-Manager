@@ -5,6 +5,7 @@
 #include <functional>
 
 class QLineEdit;
+class QTabWidget;
 
 // QSettings keys shared between the settings dialog and the main window
 namespace SettingsKeys {
@@ -12,6 +13,8 @@ namespace SettingsKeys {
 inline constexpr char CopyOnSelect[] = "clipboard/copyOnSelect";
 // Ask clipboard managers (e.g. KDE's Klipper) not to keep copied snippets in their history
 inline constexpr char HideFromHistory[] = "clipboard/hideFromHistory";
+// Rich text snippets and the formatting toolbar; when off, everything is plain text
+inline constexpr char RichText[] = "editor/richText";
 }
 
 class SettingsDialog : public QDialog
@@ -30,6 +33,8 @@ signals:
     void databaseChanged();
     // Emitted when one of the clipboard options is changed
     void clipboardSettingsChanged();
+    // Emitted when one of the editor options is changed
+    void editorSettingsChanged();
 
 private slots:
     void onMoveDatabase();
@@ -42,6 +47,7 @@ private:
     bool savePendingChanges();
 
     QLineEdit *m_pathEdit;
+    QTabWidget *m_tabs;
     std::function<bool()> m_savePendingChanges;
 };
 
