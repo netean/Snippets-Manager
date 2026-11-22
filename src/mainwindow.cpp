@@ -260,7 +260,8 @@ bool MainWindow::isContentEditable() const
 
 void MainWindow::loadSnippet(int id)
 {
-    Snippet snippet = id != -1 ? Database::instance().getSnippet(id) : Snippet();
+    Snippet snippet = id != -1 ? Database::instance().snippet(id) : Snippet();
+    m_current = snippet;
     m_currentSnippetId = snippet.id;
 
     m_titleEdit->setText(snippet.title);
@@ -453,18 +454,20 @@ bool MainWindow::saveCurrentSnippet(QString *errorMessage)
         return true;
     }
 
-    QString title = m_titleEdit->text().trimmed();
-    QString content = m_contentEdit->toPlainText();
+    Snippet snippet = m_current;
+    snippet.title = m_titleEdit->text().trimmed();
+    snippet.content = m_contentEdit->toPlainText();
 
-    if (title.isEmpty()) {
-        title = "Untitled";
+    if (snippet.title.isEmpty()) {
+        snippet.title = "Untitled";
     }
 
-    if (!Database::instance().updateSnippet(m_currentSnippetId, title, content, errorMessage)) {
+    if (!Database::instance().updateSnippet(snippet, errorMessage)) {
         statusBar()->showMessage("The snippet could not be saved");
         return false;
     }
 
+    m_current = snippet;
     m_isModified = false;
     m_model->refresh();
     selectSnippet(m_currentSnippetId);

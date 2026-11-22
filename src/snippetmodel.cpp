@@ -50,17 +50,13 @@ QHash<int, QByteArray> SnippetModel::roleNames() const
 void SnippetModel::refresh()
 {
     beginResetModel();
-    if (m_searchTerm.isEmpty()) {
-        m_snippets = Database::instance().getAllSnippets(m_sortOrder);
-    } else {
-        m_snippets = Database::instance().searchSnippets(m_searchTerm, m_sortOrder);
-    }
+    m_snippets = Database::instance().snippets(m_filter, m_sortOrder);
     endResetModel();
 }
 
 void SnippetModel::search(const QString &searchTerm)
 {
-    m_searchTerm = searchTerm;
+    m_filter.search = searchTerm;
     refresh();
 }
 

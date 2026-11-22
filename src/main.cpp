@@ -36,6 +36,10 @@ int main(int argc, char *argv[])
     if (!dbWarning.isEmpty()) {
         MessageBox::warning(&window, "Snippet Manager", dbWarning);
     }
+    QString upgradeNotice = Database::instance().takeUpgradeNotice();
+    if (!upgradeNotice.isEmpty()) {
+        MessageBox::information(&window, "Database Upgraded", upgradeNotice);
+    }
 
     return app.exec();
 }

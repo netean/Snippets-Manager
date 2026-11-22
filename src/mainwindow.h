@@ -78,6 +78,7 @@ private:
     
     SnippetModel *m_model;
     int m_currentSnippetId;
+    Snippet m_current;
     bool m_isModified;
     bool m_updatingSelection;
     QTimer *m_searchTimer;

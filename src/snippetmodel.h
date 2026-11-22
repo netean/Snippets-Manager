@@ -32,7 +32,7 @@ public:
 
 private:
     QList<Snippet> m_snippets;
-    QString m_searchTerm;
+    SnippetFilter m_filter;
     Database::SortOrder m_sortOrder = Database::CreatedDescending;
 };
 
