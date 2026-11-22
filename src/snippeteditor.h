@@ -6,6 +6,7 @@
 #include "database.h"
 
 class QAction;
+class QActionGroup;
 class QComboBox;
 class QLineEdit;
 class QTextCharFormat;
@@ -52,11 +53,14 @@ public:
     bool showsFormatting() const { return m_formatted; }
 
     QWidget *contentViewport() const;
+    // The formatting actions, for a Format menu (nullptr marks a separator)
+    QList<QAction *> formatActions() const;
     void focusTitle();
     void focusContent();
 
 protected:
     void changeEvent(QEvent *event) override;
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
     // Emitted whenever the user changes the title, tags, type or content
@@ -75,6 +79,14 @@ private:
     void updateFormatActions();
     void mergeFormat(const QTextCharFormat &format);
     void toggleList(int style);
+    void toggleChecklist();
+    void changeListIndent(int delta);
+    void applyHeading(int level);
+    void editLink();
+    // Whether the formatting toolbar applies (plain or rich text, being edited)
+    bool canFormat() const;
+    // Makes sure the content is rich text before formatting it; false if it can't be
+    bool prepareFormatting();
     void clearFormatting();
     bool richTextEnabled() const;
     // Whether the current type should be displayed with formatting
@@ -103,6 +115,14 @@ private:
     QAction *m_codeAction;
     QAction *m_bulletAction;
     QAction *m_numberAction;
+    QAction *m_underlineAction;
+    QAction *m_checklistAction;
+    QAction *m_indentAction;
+    QAction *m_outdentAction;
+    QAction *m_linkAction;
+    QAction *m_clearAction;
+    QComboBox *m_styleCombo;
+    QActionGroup *m_styleGroup;
 
     // Colours code snippets (null in builds without KSyntaxHighlighting)
     KSyntaxHighlighting::SyntaxHighlighter *m_highlighter = nullptr;

@@ -480,6 +480,21 @@ void MainWindow::setupMenus()
     editMenu->addSeparator();
     editMenu->addAction(m_findAction);
 
+    // The same formatting actions as the toolbar above the content
+    QMenu *formatMenu = menuBar()->addMenu("F&ormat");
+    QMenu *styleMenu = formatMenu->addMenu("Paragraph &Style");
+    bool inStyles = true;
+    for (QAction *action : m_editor->formatActions()) {
+        if (!action) {
+            if (!inStyles) formatMenu->addSeparator();
+            inStyles = false;
+        } else if (inStyles) {
+            styleMenu->addAction(action);
+        } else {
+            formatMenu->addAction(action);
+        }
+    }
+
     QMenu *helpMenu = menuBar()->addMenu("&Help");
     QAction *aboutAction = helpMenu->addAction("&About Snippet Manager");
     connect(aboutAction, &QAction::triggered, this, &MainWindow::onAbout);

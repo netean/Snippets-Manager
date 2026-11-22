@@ -88,6 +88,31 @@ private slots:
         QCOMPARE(RichText::toMarkdown(&document), markdown);
     }
 
+    void newFormattingSurvivesRoundTrip_data()
+    {
+        QTest::addColumn<QString>("markdown");
+        QTest::newRow("underline") << "some <u>underlined</u> and <u><b><i>bold italic underlined</i></b></u> text";
+        QTest::newRow("underline with symbols") << "<u>2&#42;3&#42;4 &#60;tag&#62; &#91;x&#93;&#40;y&#41; snake&#95;case</u>";
+        QTest::newRow("headings") << "# Title\n\n## Section\n\n### Smaller\n\nBody text";
+        QTest::newRow("checklist") << "- [ ] to do\n- [x] done";
+        QTest::newRow("nested list") << "- one\n    - inner\n        - deeper\n- two";
+        QTest::newRow("link") << "see [the site](https://example.com) now";
+    }
+
+    void newFormattingSurvivesRoundTrip()
+    {
+        QFETCH(QString, markdown);
+        QTextDocument document;
+        document.setMarkdown(markdown);
+        QCOMPARE(RichText::toMarkdown(&document), markdown);
+    }
+
+    void escapesUnderlineTagsInText()
+    {
+        // Typed "<u>" is text, not underlining
+        QCOMPARE(RichText::toPlainText(RichText::fromPlainText("a <u>b</u>")), QString("a <u>b</u>"));
+    }
+
     void dropsImages()
     {
         QTextDocument document;

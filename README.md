@@ -25,7 +25,7 @@ Used and tested on Fedora and CachyOs
 - **Add, Edit, Delete**: Full CRUD operations for text snippets, with a trash and undo
 - **Search**: Fast, ranked search through titles, tags and content (matches part of a word)
 - **Folders and tags**: Organise snippets in folders (drag and drop), and tag them across folders
-- **Plain text, rich text or code**: A small formatting toolbar for rich text, and syntax highlighting for code (both can be turned off)
+- **Plain text, rich text or code**: A formatting toolbar and Format menu (headings, bold, italic, underline, strikethrough, code, links, bulleted, numbered and checklists), and syntax highlighting for code (both can be turned off)
 - **Copy to Clipboard**: Select a snippet to copy it, with placeholders like `{{date}}` filled in
 - **Quick search**: A popup from the tray or a global keyboard shortcut, to find and copy a snippet from any app
 - **Import and export**: JSON, Markdown and CSV
@@ -101,7 +101,7 @@ Or just download the binary release from the releases page.
 1. **Adding Snippets**: Click "Add" (Ctrl+N) to create a new snippet
 2. **Renaming and tagging**: The title and tags are always editable. Type a new title or some comma-separated tags and press Enter (or select another snippet) to save
 3. **Editing Content**: Select a snippet, click "Edit" (Ctrl+E), make changes and click "Save" (Ctrl+S)
-4. **Type**: While editing, pick Plain text, Rich text (with a formatting toolbar: bold, italic, strikethrough, code and lists) or a programming language (highlighted, in a fixed-width font)
+4. **Type and formatting**: While editing, pick Plain text, Rich text or a programming language (highlighted, in a fixed-width font). Plain and rich text snippets get a formatting toolbar above the content, with the same actions in the Format menu: paragraph style (normal text or headings 1-3, Ctrl+0 to Ctrl+3), bold (Ctrl+B), italic (Ctrl+I), underline (Ctrl+U), strikethrough, code, links (Ctrl+K), bulleted, numbered and checklists, indent and outdent (Tab and Shift+Tab in a list), and clear formatting. Using any of them on a plain text snippet turns it into rich text
 5. **Searching**: Type in the search box (Ctrl+F) to find snippets by title, tags or content. Results are ranked by how well they match. Escape clears the search, and the Down arrow moves into the list
 6. **Folders**: Right-click the list and choose "New Folder..." (or press Ctrl+Shift+N). Drag snippets onto a folder to move them there (or onto empty space to take them out), or right-click a snippet and choose "Move to Folder". Folders can go inside other folders. Right-click a folder to add a snippet or subfolder to it, rename it (F2) or delete it. Deleting a folder never deletes snippets: what was in it moves up a level. While searching, filtering by tag or looking at the trash, the list is flat, without folders
 7. **Filtering**: Use "Show" to list all snippets, only untagged ones, only those with a tag, or the trash

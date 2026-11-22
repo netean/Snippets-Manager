@@ -34,8 +34,12 @@ QString fromPlainText(const QString &text)
 //
 // Qt's own Markdown writer doesn't escape special characters before Qt 6.5,
 // so "2*3*4" would come back as italics. This writer covers what the editor
-// can produce (paragraphs, headings, lists, bold, italic, strikethrough,
-// code and links) and escapes everything else, on every Qt version.
+// can produce (paragraphs, headings, lists and checklists, bold, italic,
+// underline, strikethrough, code and links) and escapes everything else, on
+// every Qt version. Markdown has no underline, so underlined text is written
+// as inline HTML (<u><b>...</b></u>), which Qt reads back. Qt reads that HTML
+// on its own, ignoring Markdown formatting around or inside it, so all the
+// span's formatting goes in the HTML.
 // ---------------------------------------------------------------------------
 
 // Escapes characters that Markdown would otherwise treat as formatting
@@ -93,15 +97,32 @@ struct Span {
     bool bold = false;
     bool italic = false;
     bool strike = false;
+    bool underline = false;
     bool code = false;
     QString link;
 
     bool sameStyle(const Span &other) const
     {
         return bold == other.bold && italic == other.italic && strike == other.strike
-               && code == other.code && link == other.link;
+               && underline == other.underline && code == other.code && link == other.link;
     }
 };
+
+// Escapes text for inline HTML, using entities for anything Markdown might
+// otherwise treat as formatting inside it
+static QString escapeForInlineHtml(const QString &text)
+{
+    QString result;
+    for (QChar c : text) {
+        if (c.unicode() < 128 && (c.isPunct() || c.isSymbol())) {
+            // (int: newer Qt versions treat a char16_t argument as a character)
+            result += QString("&#%1;").arg(int(c.unicode()));
+        } else {
+            result += c;
+        }
+    }
+    return result;
+}
 
 static QString writeSpan(const Span &span)
 {
@@ -118,6 +139,16 @@ static QString writeSpan(const Span &span)
         return escapeText(text);
     }
 
+    if (span.underline) {
+        // (Qt doesn't read code formatting back from inline HTML, so underlined
+        // code is kept as underlined text)
+        QString html = escapeForInlineHtml(core);
+        if (span.strike) html = "<s>" + html + "</s>";
+        if (span.italic) html = "<i>" + html + "</i>";
+        if (span.bold) html = "<b>" + html + "</b>";
+        return before + "<u>" + html + "</u>" + after;
+    }
+
     QString written = span.code ? codeSpan(core) : escapeText(core);
     if (span.strike) written = "~~" + written + "~~";
     if (span.italic) written = "*" + written + "*";
@@ -132,7 +163,9 @@ static QString writeSpan(const Span &span)
 
 static QString writeBlockText(const QTextBlock &block)
 {
-    // Collect the block's text as spans, merging neighbours with the same style
+    // Collect the block's text as spans, merging neighbours with the same style.
+    // Headings are shown bold anyway, so that isn't written as formatting.
+    bool heading = block.blockFormat().headingLevel() > 0;
     QList<Span> spans;
     for (auto it = block.begin(); !it.atEnd(); ++it) {
         QTextFragment fragment = it.fragment();
@@ -143,7 +176,9 @@ static QString writeBlockText(const QTextBlock &block)
         // character; rich snippets don't support them, so leave them out
         span.text = fragment.text().remove(QChar::ObjectReplacementCharacter);
         if (span.text.isEmpty()) continue;
-        span.bold = format.fontWeight() >= QFont::Bold;
+        span.bold = !heading && format.fontWeight() >= QFont::Bold;
+        // Links are shown underlined; only other underlining is formatting
+        span.underline = format.fontUnderline() && !format.isAnchor();
         span.italic = format.fontItalic();
         span.strike = format.fontStrikeOut();
         span.code = format.fontFixedPitch();
@@ -192,6 +227,12 @@ QString toMarkdown(const QTextDocument *document)
                             || style == QTextListFormat::ListUpperAlpha || style == QTextListFormat::ListLowerRoman
                             || style == QTextListFormat::ListUpperRoman;
             QString marker = numbered ? QString::number(list->itemNumber(block) + 1) + ". " : QString("- ");
+            // Checklist items
+            if (block.blockFormat().marker() == QTextBlockFormat::MarkerType::Unchecked) {
+                marker += "[ ] ";
+            } else if (block.blockFormat().marker() == QTextBlockFormat::MarkerType::Checked) {
+                marker += "[x] ";
+            }
             QString indent(level * 4, ' ');
             // Continuation lines of the item are indented to line up with its text
             text.replace("\n", "\n" + indent + QString(marker.size(), ' '));

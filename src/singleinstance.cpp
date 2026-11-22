@@ -39,7 +39,12 @@ bool SingleInstance::sendToRunning(const QString &command)
     }
     socket.write(command.toUtf8() + "\n");
     socket.waitForBytesWritten(1000);
-    socket.disconnectFromServer();
+    // The running copy closes the connection once it has read the command.
+    // Closing first could lose the command (Windows pipes drop unread data).
+    if (socket.state() == QLocalSocket::ConnectedState) {
+        socket.waitForDisconnected(2000);
+    }
+    socket.abort();
     return true;
 }
 
@@ -56,12 +61,18 @@ bool SingleInstance::listen()
     connect(m_server, &QLocalServer::newConnection, this, [this]() {
         while (QLocalSocket *socket = m_server->nextPendingConnection()) {
             auto readCommands = [this, socket]() {
+                bool received = false;
                 while (socket->canReadLine()) {
                     // Commands are short; ignore anything that isn't
                     QString command = QString::fromUtf8(socket->readLine(1024)).trimmed();
+                    received = true;
                     if (!command.isEmpty()) {
                         emit commandReceived(command);
                     }
+                }
+                // Tell the sender it was received
+                if (received && socket->state() == QLocalSocket::ConnectedState) {
+                    socket->disconnectFromServer();
                 }
             };
             connect(socket, &QLocalSocket::readyRead, this, readCommands);

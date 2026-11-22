@@ -5,6 +5,8 @@
 #include "richtext.h"
 #include "singleinstance.h"
 #include <QSignalSpy>
+#include <QThread>
+#include <QToolBar>
 #include <QStandardPaths>
 #include <QMimeData>
 #include <QApplication>
@@ -368,8 +370,14 @@ private slots:
         SingleInstance instance;
         QVERIFY(instance.listen());
         QSignalSpy received(&instance, &SingleInstance::commandReceived);
-        QVERIFY(SingleInstance::sendToRunning("popup token-123"));
-        QVERIFY(received.wait(2000));
+        // Sent from another thread, like a second launch of the app would be
+        bool sent = false;
+        QThread *sender = QThread::create([&sent]() { sent = SingleInstance::sendToRunning("popup token-123"); });
+        sender->start();
+        QVERIFY(received.wait(3000));
+        QVERIFY(sender->wait(5000));
+        delete sender;
+        QVERIFY(sent);
         QCOMPARE(received.first().first().toString(), QString("popup token-123"));
     }
 
@@ -441,6 +449,62 @@ private slots:
         QVERIFY(Database::instance().folders().isEmpty());
         QCOMPARE(Database::instance().snippets().size(), 2);
         QCOMPARE(model->rowCount(), 2);
+    }
+
+    void formattingToolbar()
+    {
+        Database::instance().addSnippet("Note", "Title\nhello world");
+        Snippet code;
+        code.title = "Code";
+        code.language = "Python";
+        code.content = "x = 1";
+        Database::instance().addSnippet(code);
+        reload();
+        QWidget *toolbar = m_window->findChild<QWidget *>("formatBar");
+        auto *style = m_window->findChild<QComboBox *>("styleCombo");
+
+        // Code snippets don't get the toolbar
+        selectRow(0);  // newest first: Code
+        QTest::keyClick(m_window, Qt::Key_E, Qt::ControlModifier);
+        QVERIFY(!toolbar->isVisible());
+        QTest::keyClick(m_window, Qt::Key_S, Qt::ControlModifier);
+
+        // Plain text: the toolbar is there, and formatting turns it into rich text,
+        // applied to what was selected
+        selectRow(1);
+        QTest::keyClick(m_window, Qt::Key_E, Qt::ControlModifier);
+        QVERIFY(toolbar->isVisible());
+        QTextCursor cursor = m_content->textCursor();
+        cursor.setPosition(QString("Title\nhello ").size());
+        cursor.setPosition(QString("Title\nhello world").size(), QTextCursor::KeepAnchor);
+        m_content->setTextCursor(cursor);
+        QTest::keyClick(m_content, Qt::Key_B, Qt::ControlModifier);
+        QCOMPARE(m_type->currentData().toString(), QString("rich"));
+        QTest::keyClick(m_content, Qt::Key_U, Qt::ControlModifier);
+
+        // The first line becomes a heading
+        cursor = m_content->textCursor();
+        cursor.setPosition(0);
+        m_content->setTextCursor(cursor);
+        style->setCurrentIndex(1);
+        emit style->activated(1);
+
+        // A checklist item at the end
+        cursor.movePosition(QTextCursor::End);
+        m_content->setTextCursor(cursor);
+        QTest::keyClick(m_content, Qt::Key_Return);
+        // Typing carries on in the same style, as in a word processor; switch it off
+        QTest::keyClick(m_content, Qt::Key_B, Qt::ControlModifier);
+        QTest::keyClick(m_content, Qt::Key_U, Qt::ControlModifier);
+        QTest::keyClicks(m_content, "task");
+        for (QAction *action : m_window->findChild<QWidget *>("formatBar")->actions()) {
+            if (action->text() == "Checklist") action->trigger();
+        }
+
+        QTest::keyClick(m_window, Qt::Key_S, Qt::ControlModifier);
+        Snippet saved = Database::instance().snippets().value(1);
+        QCOMPARE(saved.format, Snippet::RichText);
+        QCOMPARE(saved.content, QString("# Title\n\nhello <u><b>world</b></u>\n\n- [ ] task"));
     }
 
 private:
