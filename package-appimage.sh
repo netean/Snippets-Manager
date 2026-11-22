@@ -92,7 +92,7 @@ rm -f "$SOURCE_DIR"/SnippetManager-*-"$ARCH".AppImage
     # LINUXDEPLOY_OUTPUT_VERSION is embedded in the AppImage's desktop file (X-AppImage-Version)
     LDAI_OUTPUT="$OUTPUT" LINUXDEPLOY_OUTPUT_VERSION="$VERSION" "$TOOLS_DIR/linuxdeploy-$ARCH.AppImage" \
         --appdir "$APPDIR" \
-        --desktop-file "$APPDIR/usr/share/applications/snippetmanager.desktop" \
+        --desktop-file "$APPDIR/usr/share/applications/io.github.netean.SnippetManager.desktop" \
         --icon-file "$SOURCE_DIR/resources/icon.png" \
         --icon-filename snippetmanager \
         --plugin qt \

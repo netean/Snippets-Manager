@@ -70,23 +70,6 @@ MainWindow::MainWindow(QWidget *parent)
     versionLabel->setStyleSheet("color: #666; padding: 0 4px;");
     statusBar()->addPermanentWidget(versionLabel);
     
-    // The application icon is set in main.cpp, but we can override for this window if needed
-    QIcon windowIcon = QApplication::windowIcon();
-    if (!windowIcon.isNull()) {
-        setWindowIcon(windowIcon);
-        qDebug() << "Window icon inherited from application";
-    } else {
-        // Fallback icon loading if application icon wasn't set
-        QIcon icon(":/icon.png");
-        if (icon.isNull()) {
-            icon = QIcon(":/icon.svg");
-        }
-        if (!icon.isNull()) {
-            setWindowIcon(icon);
-            qDebug() << "Window icon set from resources";
-        }
-    }
-    
     resize(800, 600);
 }
 

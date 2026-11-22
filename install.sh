@@ -8,6 +8,7 @@
 set -euo pipefail
 
 BINARY="snippetmanager"
+APP_ID="io.github.netean.SnippetManager"
 SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The version comes from project(... VERSION x.y) in CMakeLists.txt
 VERSION="$(sed -n 's/^project(.*VERSION \([0-9][0-9.]*\).*/\1/p' "$SOURCE_DIR/CMakeLists.txt")"
@@ -22,7 +23,8 @@ UNINSTALL=false
 # Files installed by CMakeLists.txt, relative to the prefix. Used for uninstalling.
 INSTALLED_FILES=(
     "bin/$BINARY"
-    "share/applications/$BINARY.desktop"
+    "share/applications/$APP_ID.desktop"
+    "share/applications/$BINARY.desktop"   # name used by 1.x
     "share/icons/hicolor/128x128/apps/$BINARY.png"
     "share/icons/hicolor/64x64/apps/$BINARY.png"
     "share/icons/hicolor/32x32/apps/$BINARY.png"
@@ -194,7 +196,12 @@ $SUDO cmake --install "$BUILD_DIR" --prefix "$PREFIX" >/dev/null || die "Install
 
 # Point the menu entry at the installed binary, so it launches even when the
 # prefix's bin directory isn't on the desktop session's PATH (common for ~/.local/bin)
-desktop_file="$PREFIX/share/applications/$BINARY.desktop"
+# 1.x installed the menu entry under a different name
+if [[ -f "$PREFIX/share/applications/$BINARY.desktop" ]]; then
+    $SUDO rm -f "$PREFIX/share/applications/$BINARY.desktop"
+fi
+
+desktop_file="$PREFIX/share/applications/$APP_ID.desktop"
 if [[ -f "$desktop_file" ]]; then
     exec_path="$PREFIX/bin/$BINARY"
     # The desktop entry spec needs paths with spaces or special characters quoted,
