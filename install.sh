@@ -236,7 +236,8 @@ fi
 refresh_desktop_caches
 
 # The Qt SQLite driver is a runtime plugin; warn if it looks absent
-if ! find /usr/lib* /usr/local/lib* -path '*sqldrivers*' -name 'libqsqlite*' 2>/dev/null | grep -q .; then
+# (Not "find | grep -q": with pipefail, grep exiting early makes find fail with SIGPIPE)
+if [[ -z "$(find /usr/lib* /usr/local/lib* -path '*sqldrivers*' -name 'libqsqlite*' -print -quit 2>/dev/null)" ]]; then
     warn "The Qt 6 SQLite driver wasn't found. If the app can't open its database, run ./install.sh --install-deps."
 fi
 
