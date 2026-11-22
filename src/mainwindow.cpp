@@ -25,6 +25,7 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPushButton>
+#include <QSessionManager>
 #include <QSettings>
 #include <QSplitter>
 #include <QStatusBar>
@@ -94,6 +95,12 @@ MainWindow::MainWindow(QWidget *parent)
         resize(900, 600);
     }
     m_splitter->restoreState(settings.value(SplitterKey).toByteArray());
+
+    // Qt 6 doesn't close windows when the desktop session ends (logging out or
+    // shutting down), so save any edit in progress when the session manager asks
+    connect(qApp, &QGuiApplication::commitDataRequest, this, [this](QSessionManager &) {
+        saveCurrentSnippet();
+    }, Qt::DirectConnection);
 
     m_quickSearch = new QuickSearch;
     connect(m_quickSearch, &QuickSearch::openRequested, this, &MainWindow::openSnippet);

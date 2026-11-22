@@ -87,6 +87,13 @@ private slots:
         QCOMPARE(RichText::toMarkdown(&document), markdown);
     }
 
+    void dropsImages()
+    {
+        QTextDocument document;
+        document.setHtml("before <img src=\"data:image/png;base64,\"> after");
+        QCOMPARE(RichText::toMarkdown(&document), QString("before  after"));
+    }
+
     void dropsEmptyParagraphs()
     {
         QCOMPARE(RichText::fromPlainText("a\n\n\nb"), QString("a\n\nb"));

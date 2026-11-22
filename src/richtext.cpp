@@ -139,7 +139,10 @@ static QString writeBlockText(const QTextBlock &block)
         if (!fragment.isValid()) continue;
         QTextCharFormat format = fragment.charFormat();
         Span span;
-        span.text = fragment.text();
+        // Images (e.g. pasted from a web page) appear as an object replacement
+        // character; rich snippets don't support them, so leave them out
+        span.text = fragment.text().remove(QChar::ObjectReplacementCharacter);
+        if (span.text.isEmpty()) continue;
         span.bold = format.fontWeight() >= QFont::Bold;
         span.italic = format.fontItalic();
         span.strike = format.fontStrikeOut();
