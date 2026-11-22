@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0 (in development)
+
+New features are being built on `main`. Fixes for 1.x go on the `v1` branch.
+
 ## 1.3
 
 Safety and reliability fixes.

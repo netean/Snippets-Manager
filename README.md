@@ -2,6 +2,11 @@
 
 **Current version: 1.3** — see [CHANGELOG.md](CHANGELOG.md) for what's new.
 
+## Versions
+
+- **1.x (stable)**: the simple version described in this README. It lives on the [`v1` branch](../../tree/v1) and gets bug and security fixes only. Download it from [Releases](../../releases).
+- **2.0 (in development)**: new features are being built on `main`. 2.0 will open 1.x databases, so you can upgrade without losing your snippets. Until 2.0 is released, `main` may be unfinished; use a release or the `v1` branch if you just want a working app.
+
 A very simple, very basic, KDE desktop application for storing and managing text snippets, code snippets, and short phrases with full Unicode support.
 
 I couldn't find anything that suited my needs: just a dead simple, very basic snippets tools for storing string. So I built one.. actually Claude did most of the coding, I just "directed it".
