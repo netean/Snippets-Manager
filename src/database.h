@@ -79,6 +79,10 @@ public:
     // Deletes permanently (see moveToTrash)
     bool deleteSnippet(int id, QString* errorMessage = nullptr);
 
+    // Whether searches use the full-text index (ranked by relevance), rather
+    // than a plain substring search
+    bool hasSearchIndex() const { return m_searchIndex; }
+
     // Tags in use by snippets that aren't in the trash, with how many use each
     QList<QPair<QString, int>> tagCounts();
     // Cleans up a list of tags: trims them and drops empty and repeated ones
@@ -88,12 +92,16 @@ private:
     Database() = default;
     QSqlDatabase m_db;
     QString m_upgradeNotice;
+    bool m_searchIndex = false;
 
     bool openAt(const QString& path, QString* errorMessage);
     bool prepareSchema(QString* errorMessage);
     bool createTables();
     bool upgradeSchema(int fromVersion, QString* errorMessage);
     void tidyUp();
+    void buildSearchIndex();
+    void indexSnippet(int id);
+    void unindexSnippet(int id);
     bool writeTags(int id, const QStringList& tags);
     QHash<int, QStringList> readAllTags();
     bool exec(QSqlQuery& query, QString* errorMessage);

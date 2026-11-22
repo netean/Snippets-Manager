@@ -289,6 +289,88 @@ private slots:
         QVERIFY(db.tagCounts().isEmpty());
     }
 
+    void searchRanksAndMatchesParts()
+    {
+        Database& db = Database::instance();
+        QVERIFY(db.createDatabase(m_dir.filePath("fts.db")));
+        QVERIFY(db.hasSearchIndex());
+        int body = db.addSnippet("Shopping", "remember the deployment keys");
+        int title = db.addSnippet("Deployment steps", "run it");
+        Snippet tagged;
+        tagged.title = "Other";
+        tagged.tags = {"deployment"};
+        int tag = db.addSnippet(tagged);
+
+        // Title matches come first, then tags, then content
+        QList<Snippet> found = search("deploy");
+        QCOMPARE(found.size(), 3);
+        QCOMPARE(found[0].id, title);
+        QCOMPARE(found[1].id, tag);
+        QCOMPARE(found[2].id, body);
+
+        // Part of a word, every word must match, and short words still work
+        QCOMPARE(search("ploym").size(), 3);
+        QCOMPARE(search("deploy keys").size(), 1);
+        QCOMPARE(search("it").size(), 1);
+        QCOMPARE(search("run deploy").size(), 1);
+    }
+
+    void searchIndexFollowsChanges()
+    {
+        Database& db = Database::instance();
+        QVERIFY(db.createDatabase(m_dir.filePath("fts-changes.db")));
+        int id = db.addSnippet("first", "alpha");
+        QCOMPARE(search("alpha").size(), 1);
+
+        Snippet changed = db.snippet(id);
+        changed.content = "omega";
+        QVERIFY(db.updateSnippet(changed));
+        QCOMPARE(search("alpha").size(), 0);
+        QCOMPARE(search("omega").size(), 1);
+
+        QVERIFY(db.deleteSnippet(id));
+        QCOMPARE(search("omega").size(), 0);
+    }
+
+    void searchFindsRenderedRichText()
+    {
+        Database& db = Database::instance();
+        QVERIFY(db.createDatabase(m_dir.filePath("fts-rich.db")));
+        Snippet rich;
+        rich.title = "Rich";
+        rich.format = Snippet::RichText;
+        rich.content = "call **my\\_function** now";
+        db.addSnippet(rich);
+        QCOMPARE(search("my_function").size(), 1);
+        QCOMPARE(search("**").size(), 0);
+    }
+
+    void searchHandlesSearchSyntax()
+    {
+        Database& db = Database::instance();
+        QVERIFY(db.createDatabase(m_dir.filePath("fts-syntax.db")));
+        db.addSnippet("quote", "say \"hello\" AND -x OR y* NEAR(z)");
+        const QStringList terms = {"\"hello\"", "AND", "-x", "y*", "NEAR(z)", "\"", "(((", "OR"};
+        for (const QString &term : terms) {
+            search(term);  // mustn't fail
+        }
+        QCOMPARE(search("\"hello\"").size(), 1);
+        QCOMPARE(search("NEAR(z)").size(), 1);
+    }
+
+    void searchIndexIsRebuiltOnOpen()
+    {
+        // Changes made by other versions (or other programs) are picked up
+        Database& db = Database::instance();
+        QString path = m_dir.filePath("fts-reopen.db");
+        QVERIFY(db.createDatabase(path));
+        db.addSnippet("kept", "x");
+        QVERIFY(db.createDatabase(m_dir.filePath("fts-other.db")));
+        makeDatabase(path, {"INSERT INTO snippets (title, content) VALUES ('added elsewhere', 'y')"});
+        QVERIFY(db.openDatabase(path));
+        QCOMPARE(search("elsewhere").size(), 1);
+    }
+
 private:
     static QList<Snippet> search(const QString& term)
     {

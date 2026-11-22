@@ -1,4 +1,5 @@
 #include "database.h"
+#include "richtext.h"
 #include <QSqlError>
 #include <QStandardPaths>
 #include <QSettings>
@@ -95,6 +96,7 @@ bool Database::openAt(const QString& path, QString* errorMessage)
         m_db.close();
         return false;
     }
+    buildSearchIndex();
 
     if (isNewFile) {
         restrictPermissions(absolutePath);
@@ -370,6 +372,85 @@ void Database::tidyUp()
     query.exec("DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM snippet_tags)");
 }
 
+// ---------------------------------------------------------------------------
+// Search index
+//
+// A full-text index in SQLite's temporary storage for this connection: it's
+// rebuilt each time the database is opened, so it never adds to the file and
+// can't get out of date if another version of the app changes the snippets.
+// The trigram tokenizer matches any part of a word, like the substring search
+// it replaces, but ranked by relevance.
+// ---------------------------------------------------------------------------
+
+// The text a snippet is searched by: rich text without its Markdown syntax
+static QString searchableText(const QString& content, const QString& format)
+{
+    return format == "rich" ? RichText::toPlainText(content) : content;
+}
+
+void Database::buildSearchIndex()
+{
+    QSqlQuery query(m_db);
+    query.exec("DROP TABLE IF EXISTS temp.snippet_search");
+    m_searchIndex = query.exec("CREATE VIRTUAL TABLE temp.snippet_search USING fts5("
+                               "title, body, tags, tokenize = 'trigram')");
+    if (!m_searchIndex) {
+        // SQLite without FTS5 or the trigram tokenizer (older than 3.34)
+        qWarning() << "Full-text search isn't available:" << query.lastError().text();
+        return;
+    }
+    if (!query.exec("SELECT id FROM snippets")) {
+        return;
+    }
+    QList<int> ids;
+    while (query.next()) {
+        ids.append(query.value(0).toInt());
+    }
+    m_db.transaction();
+    for (int id : ids) {
+        indexSnippet(id);
+    }
+    m_db.commit();
+}
+
+void Database::indexSnippet(int id)
+{
+    if (!m_searchIndex) return;
+    unindexSnippet(id);
+    QSqlQuery query(m_db);
+    query.prepare("SELECT title, content, format FROM snippets WHERE id = ?");
+    query.addBindValue(id);
+    if (!query.exec() || !query.next()) return;
+    QString title = query.value(0).toString();
+    QString body = searchableText(query.value(1).toString(), query.value(2).toString());
+    query.finish();
+
+    QSqlQuery tagQuery(m_db);
+    tagQuery.prepare("SELECT t.name FROM snippet_tags st JOIN tags t ON t.id = st.tag_id WHERE st.snippet_id = ?");
+    tagQuery.addBindValue(id);
+    QStringList tags;
+    if (tagQuery.exec()) {
+        while (tagQuery.next()) tags << tagQuery.value(0).toString();
+    }
+
+    QSqlQuery insert(m_db);
+    insert.prepare("INSERT INTO temp.snippet_search (rowid, title, body, tags) VALUES (?, ?, ?, ?)");
+    insert.addBindValue(id);
+    insert.addBindValue(title);
+    insert.addBindValue(body);
+    insert.addBindValue(tags.join(' '));
+    insert.exec();
+}
+
+void Database::unindexSnippet(int id)
+{
+    if (!m_searchIndex) return;
+    QSqlQuery query(m_db);
+    query.prepare("DELETE FROM temp.snippet_search WHERE rowid = ?");
+    query.addBindValue(id);
+    query.exec();
+}
+
 QString Database::takeUpgradeNotice()
 {
     QString notice = m_upgradeNotice;
@@ -478,15 +559,39 @@ QList<Snippet> Database::snippets(const SnippetFilter& filter, SortOrder order)
 {
     QStringList conditions;
     QVariantList values;
+    QString join;
+    bool ranked = false;
 
     conditions << (filter.trash ? "s.deleted_at IS NOT NULL" : "s.deleted_at IS NULL");
 
+    // Every word typed must match somewhere: in the title, content or tags
     const QStringList terms = filter.search.split(' ', Qt::SkipEmptyParts);
-    for (const QString& term : terms) {
-        conditions << R"((s.title LIKE ? ESCAPE '\' OR s.content LIKE ? ESCAPE '\' OR EXISTS (
-                            SELECT 1 FROM snippet_tags st JOIN tags t ON t.id = st.tag_id
-                            WHERE st.snippet_id = s.id AND t.name LIKE ? ESCAPE '\')))";
-        values << likePattern(term) << likePattern(term) << likePattern(term);
+    if (!terms.isEmpty() && m_searchIndex) {
+        join = "JOIN temp.snippet_search ON temp.snippet_search.rowid = s.id";
+        QStringList phrases;
+        for (const QString& term : terms) {
+            if (term.size() >= 3) {
+                // A quoted phrase, so characters like * and - aren't search syntax
+                phrases << "\"" + QString(term).replace('"', "\"\"") + "\"";
+            } else {
+                // The trigram index needs at least three characters
+                conditions << R"((snippet_search.title LIKE ? ESCAPE '\' OR snippet_search.body LIKE ? ESCAPE '\'
+                                  OR snippet_search.tags LIKE ? ESCAPE '\'))";
+                values << likePattern(term) << likePattern(term) << likePattern(term);
+            }
+        }
+        if (!phrases.isEmpty()) {
+            conditions << "snippet_search MATCH ?";
+            values << phrases.join(" AND ");
+            ranked = true;
+        }
+    } else {
+        for (const QString& term : terms) {
+            conditions << R"((s.title LIKE ? ESCAPE '\' OR s.content LIKE ? ESCAPE '\' OR EXISTS (
+                                SELECT 1 FROM snippet_tags st JOIN tags t ON t.id = st.tag_id
+                                WHERE st.snippet_id = s.id AND t.name LIKE ? ESCAPE '\')))";
+            values << likePattern(term) << likePattern(term) << likePattern(term);
+        }
     }
 
     if (filter.untagged) {
@@ -498,8 +603,10 @@ QList<Snippet> Database::snippets(const SnippetFilter& filter, SortOrder order)
     }
 
     QSqlQuery query(m_db);
-    query.prepare(QString("SELECT %1 FROM snippets s WHERE %2 %3")
-                      .arg(SnippetColumns, conditions.join(" AND "), orderByClause(order)));
+    // Ranked results put title matches first, then tags, then content
+    QString orderBy = ranked ? "ORDER BY bm25(snippet_search, 10.0, 1.0, 5.0), s.id DESC" : orderByClause(order);
+    query.prepare(QString("SELECT %1 FROM snippets s %2 WHERE %3 %4")
+                      .arg(SnippetColumns, join, conditions.join(" AND "), orderBy));
     for (const QVariant& value : values) {
         query.addBindValue(value);
     }
@@ -619,6 +726,7 @@ int Database::addSnippet(const Snippet& snippet, QString* errorMessage)
         if (errorMessage) *errorMessage = m_db.lastError().text();
         return -1;
     }
+    indexSnippet(id);
     return id;
 }
 
@@ -663,6 +771,7 @@ bool Database::updateSnippet(const Snippet& snippet, QString* errorMessage)
         if (errorMessage) *errorMessage = m_db.lastError().text();
         return false;
     }
+    indexSnippet(snippet.id);
     return true;
 }
 
@@ -676,5 +785,6 @@ bool Database::deleteSnippet(int id, QString* errorMessage)
     }
     // Its snippet_tags rows go with it; remove tags nothing uses any more
     query.exec("DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM snippet_tags)");
+    unindexSnippet(id);
     return true;
 }

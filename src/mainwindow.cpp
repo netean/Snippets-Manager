@@ -483,6 +483,11 @@ void MainWindow::onSearchTextChanged()
     saveCurrentSnippet();
     m_model->search(m_searchEdit->text());
     selectSnippet(currentId());
+
+    // Search results are ranked by how well they match, rather than sorted
+    bool ranked = !m_searchEdit->text().trimmed().isEmpty() && Database::instance().hasSearchIndex();
+    m_sortCombo->setEnabled(!ranked);
+    m_sortCombo->setToolTip(ranked ? "Search results are sorted by best match" : QString());
 }
 
 void MainWindow::onSortOrderChanged()
