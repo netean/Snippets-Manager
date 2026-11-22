@@ -16,6 +16,8 @@ QString fromPlainText(const QString &text);
 // Writes a document as Markdown, escaping anything that isn't formatting.
 // The same on every Qt version (Qt's own writer doesn't escape before 6.5).
 QString toMarkdown(const QTextDocument *document);
+// Escapes text so Markdown shows it as written
+QString escape(const QString &text);
 
 } // namespace RichText
 

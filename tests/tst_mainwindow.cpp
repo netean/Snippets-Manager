@@ -309,6 +309,21 @@ private slots:
 #endif
     }
 
+    void copyFillsInPlaceholders()
+    {
+        Database::instance().addSnippet("Dated", "Sent {{date}}");
+        reload();
+        selectRow(0);
+        QString today = QDate::currentDate().toString("yyyy-MM-dd");
+        QCOMPARE(QApplication::clipboard()->text(), "Sent " + today);
+        QCOMPARE(m_content->toPlainText(), QString("Sent {{date}}"));
+        QCOMPARE(Database::instance().snippets().value(0).content, QString("Sent {{date}}"));
+
+        QSettings().setValue("clipboard/placeholders", false);
+        QTest::keyClick(m_window, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
+        QCOMPARE(QApplication::clipboard()->text(), QString("Sent {{date}}"));
+    }
+
 private:
     void createWindow()
     {

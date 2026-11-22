@@ -13,6 +13,8 @@ namespace SettingsKeys {
 inline constexpr char CopyOnSelect[] = "clipboard/copyOnSelect";
 // Ask clipboard managers (e.g. KDE's Klipper) not to keep copied snippets in their history
 inline constexpr char HideFromHistory[] = "clipboard/hideFromHistory";
+// Fill in placeholders like {{date}} when copying
+inline constexpr char Placeholders[] = "clipboard/placeholders";
 // Rich text snippets and the formatting toolbar; when off, everything is plain text
 inline constexpr char RichText[] = "editor/richText";
 // Colour code snippets by their language (when the build supports it)

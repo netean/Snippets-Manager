@@ -1,5 +1,6 @@
 #include "clipboard.h"
 #include "database.h"
+#include "placeholders.h"
 #include "richtext.h"
 #include "settingsdialog.h"
 #include <QApplication>
@@ -26,11 +27,16 @@ void copy(const QString &plainText, const QString &html)
 
 void copySnippet(const Snippet &snippet)
 {
-    bool richText = QSettings().value(SettingsKeys::RichText, true).toBool();
-    if (snippet.isRich() && richText) {
-        copy(RichText::toPlainText(snippet.content), RichText::toHtml(snippet.content));
+    QSettings settings;
+    bool richText = snippet.isRich() && settings.value(SettingsKeys::RichText, true).toBool();
+    QString content = snippet.content;
+    if (settings.value(SettingsKeys::Placeholders, true).toBool()) {
+        content = Placeholders::expand(content, Placeholders::currentContext(), richText);
+    }
+    if (richText) {
+        copy(RichText::toPlainText(content), RichText::toHtml(content));
     } else {
-        copy(snippet.content);
+        copy(content);
     }
 }
 

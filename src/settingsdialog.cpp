@@ -1,6 +1,7 @@
 #include "settingsdialog.h"
 #include "database.h"
 #include "languages.h"
+#include "placeholders.h"
 #include "messagebox.h"
 #include <QCheckBox>
 #include <QSettings>
@@ -70,6 +71,16 @@ SettingsDialog::SettingsDialog(QWidget *parent)
                                      "(such as KDE's Klipper) don't save them. Useful if you store passwords or tokens.");
     hideFromHistoryCheck->setChecked(settings.value(SettingsKeys::HideFromHistory, false).toBool());
     clipboardLayout->addWidget(hideFromHistoryCheck);
+
+    QCheckBox *placeholdersCheck = new QCheckBox("Fill in placeholders when copying");
+    placeholdersCheck->setObjectName("placeholdersCheck");
+    placeholdersCheck->setChecked(settings.value(SettingsKeys::Placeholders, true).toBool());
+    clipboardLayout->addWidget(placeholdersCheck);
+    QLabel *placeholdersHelp = new QLabel(Placeholders::helpText());
+    placeholdersHelp->setTextFormat(Qt::PlainText);
+    placeholdersHelp->setWordWrap(true);
+    placeholdersHelp->setContentsMargins(20, 0, 0, 0);
+    clipboardLayout->addWidget(placeholdersHelp);
     clipboardLayout->addStretch();
 
     // Database
@@ -129,6 +140,10 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(copyOnSelectCheck, &QCheckBox::toggled, this, [this](bool checked) {
         QSettings().setValue(SettingsKeys::CopyOnSelect, checked);
+        emit clipboardSettingsChanged();
+    });
+    connect(placeholdersCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        QSettings().setValue(SettingsKeys::Placeholders, checked);
         emit clipboardSettingsChanged();
     });
     connect(hideFromHistoryCheck, &QCheckBox::toggled, this, [this](bool checked) {

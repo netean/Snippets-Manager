@@ -52,6 +52,15 @@ static QString escapeText(const QString &text)
     return result;
 }
 
+QString escape(const QString &text)
+{
+    QStringList lines = text.split('\n');
+    for (QString &line : lines) {
+        line = escapeText(line);
+    }
+    return lines.join('\n');
+}
+
 // Escapes what would start a heading, list or quote at the start of a line
 static QString escapeLineStart(const QString &line)
 {
