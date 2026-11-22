@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 # The application version. This is the only place it's set: the app, the
 # Windows and macOS metadata and the AppImage file name all read it from here.
-project(SnippetManager VERSION 1.2 LANGUAGES CXX)
+project(SnippetManager VERSION 1.3 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,6 +37,7 @@ set(snippetmanager_SRCS
     src/database.h
     src/settingsdialog.cpp
     src/settingsdialog.h
+    src/messagebox.h
     resources/resources.qrc
     ${snippetmanager_SRCS}
 )

@@ -9,4 +9,3 @@ Terminal=false
 Categories=Utility;TextEditor;Development;
 Keywords=snippet;text;code;manager;clipboard;
 StartupNotify=true
-MimeType=text/plain;

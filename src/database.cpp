@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QDir>
 #include <QDebug>
+#include <QStringList>
 
 static const char *DatabasePathKey = "database/path";
 
@@ -26,13 +27,20 @@ QString Database::databasePath() const
     return m_db.databaseName();
 }
 
-bool Database::initialize()
+bool Database::initialize(QString* errorMessage, QString* warningMessage)
 {
     QSettings settings;
     QString path = settings.value(DatabasePathKey, defaultDatabasePath()).toString();
+    QString defaultPath = defaultDatabasePath();
+    bool isDefault = QFileInfo(path).absoluteFilePath() == QFileInfo(defaultPath).absoluteFilePath();
 
     QString error;
     if (openAt(path, &error)) {
+        // Only this app uses the default database, so it's always safe to make it
+        // private. This also tightens databases created by earlier versions.
+        if (isDefault) {
+            restrictPermissions(databasePath());
+        }
         return true;
     }
 
@@ -41,13 +49,23 @@ bool Database::initialize()
     // Fall back to the default location if a custom database can't be opened
     // (e.g. it lives on a drive that isn't mounted). The saved setting is kept
     // so the custom database is tried again on the next start.
-    if (QFileInfo(path).absoluteFilePath() != QFileInfo(defaultDatabasePath()).absoluteFilePath()) {
-        if (openAt(defaultDatabasePath(), &error)) {
+    if (!isDefault) {
+        QString defaultError;
+        if (openAt(defaultPath, &defaultError)) {
+            restrictPermissions(databasePath());
+            if (warningMessage) {
+                *warningMessage = QString("Your database '%1' could not be opened, so the default database '%2' "
+                                          "is being used instead. Snippets you add or change now are saved there.\n\n%3")
+                                      .arg(QDir::toNativeSeparators(QFileInfo(path).absoluteFilePath()),
+                                           QDir::toNativeSeparators(databasePath()), error);
+            }
             return true;
         }
-        qWarning() << "Failed to open default database:" << error;
+        qWarning() << "Failed to open default database:" << defaultError;
+        error += "\n\nThe default database could not be opened either: " + defaultError;
     }
 
+    if (errorMessage) *errorMessage = error;
     return false;
 }
 
@@ -61,6 +79,7 @@ bool Database::openAt(const QString& path, QString* errorMessage)
     }
 
     QString absolutePath = QFileInfo(path).absoluteFilePath();
+    bool isNewFile = !QFileInfo::exists(absolutePath);
     QDir().mkpath(QFileInfo(absolutePath).absolutePath());
     m_db.setDatabaseName(absolutePath);
 
@@ -69,15 +88,79 @@ bool Database::openAt(const QString& path, QString* errorMessage)
         return false;
     }
 
-    // SQLite opens lazily, so creating the table is also what tells us
-    // whether the file is actually a usable SQLite database.
-    if (!createTables()) {
-        if (errorMessage) *errorMessage = QString("'%1' is not a valid snippets database.").arg(absolutePath);
+    if (!prepareSchema(errorMessage)) {
         m_db.close();
         return false;
     }
 
+    if (isNewFile) {
+        restrictPermissions(absolutePath);
+    }
     return true;
+}
+
+bool Database::prepareSchema(QString* errorMessage)
+{
+    QString path = QDir::toNativeSeparators(m_db.databaseName());
+    QSqlQuery query(m_db);
+
+    // Stops views and triggers stored in a database file that came from
+    // elsewhere from calling SQL functions that have side effects.
+    query.exec("PRAGMA trusted_schema = OFF");
+
+    // SQLite opens lazily, so this first read is also what tells us whether
+    // the file is actually a SQLite database.
+    if (!query.exec(R"(SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite\_%' ESCAPE '\')")) {
+        if (errorMessage) *errorMessage = QString("'%1' is not a SQLite database (%2).").arg(path, query.lastError().text());
+        return false;
+    }
+    QStringList tables;
+    while (query.next()) {
+        tables.append(query.value(0).toString());
+    }
+
+    if (tables.contains("snippets")) {
+        // Check the existing table has the columns this app reads and writes
+        QStringList columns;
+        if (query.exec("PRAGMA table_info(snippets)")) {
+            while (query.next()) {
+                columns.append(query.value(1).toString());
+            }
+        }
+        for (const char *required : {"id", "title", "content", "created", "modified"}) {
+            if (!columns.contains(QString::fromLatin1(required))) {
+                if (errorMessage) *errorMessage = QString("'%1' has a snippets table that this app doesn't recognise "
+                                                          "(it has no '%2' column). The file was left unchanged.")
+                                                      .arg(path, QString::fromLatin1(required));
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Don't add our table to some other program's database
+    if (!tables.isEmpty()) {
+        if (errorMessage) *errorMessage = QString("'%1' is a SQLite database, but not a snippets database. "
+                                                  "The file was left unchanged.").arg(path);
+        return false;
+    }
+
+    if (!createTables()) {
+        if (errorMessage) *errorMessage = QString("The snippets table could not be created in '%1'.").arg(path);
+        return false;
+    }
+    return true;
+}
+
+void Database::restrictPermissions(const QString& path)
+{
+    // Snippets often hold tokens and passwords, so keep the file private to the
+    // current user, wherever it's stored. (On Windows this only affects the
+    // read-only flag, so it's harmless there.)
+    if (!QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+                                     | QFileDevice::ReadUser | QFileDevice::WriteUser)) {
+        qWarning() << "Could not restrict the permissions of" << path;
+    }
 }
 
 bool Database::openDatabase(const QString& path, QString* errorMessage)
@@ -149,6 +232,8 @@ bool Database::moveDatabase(const QString& newPath, QString* errorMessage)
         openAt(oldPath, nullptr);
         return false;
     }
+    // QFile::copy keeps the old file's permissions, which may be readable by everyone
+    restrictPermissions(absoluteNewPath);
 
     if (!openAt(absoluteNewPath, errorMessage)) {
         QFile::remove(absoluteNewPath);
@@ -229,9 +314,13 @@ QList<Snippet> Database::getAllSnippets(SortOrder order)
 QList<Snippet> Database::searchSnippets(const QString& searchTerm, SortOrder order)
 {
     QSqlQuery query(m_db);
-    query.prepare("SELECT id, title, content, created, modified FROM snippets WHERE title LIKE ? OR content LIKE ? "
+    query.prepare(R"(SELECT id, title, content, created, modified FROM snippets )"
+                  R"(WHERE title LIKE ? ESCAPE '\' OR content LIKE ? ESCAPE '\' )"
                   + orderByClause(order));
-    QString term = "%" + searchTerm + "%";
+    // Search for % and _ literally (they're LIKE wildcards, and common in code)
+    QString escaped = searchTerm;
+    escaped.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_");
+    QString term = "%" + escaped + "%";
     query.addBindValue(term);
     query.addBindValue(term);
     
@@ -254,24 +343,36 @@ int Database::addSnippet(const QString& title, const QString& content)
     return query.lastInsertId().toInt();
 }
 
-bool Database::updateSnippet(int id, const QString& title, const QString& content)
+bool Database::updateSnippet(int id, const QString& title, const QString& content, QString* errorMessage)
 {
     QSqlQuery query(m_db);
     query.prepare("UPDATE snippets SET title = ?, content = ?, modified = CURRENT_TIMESTAMP WHERE id = ?");
     query.addBindValue(title);
     query.addBindValue(content);
     query.addBindValue(id);
-    
-    return query.exec();
+
+    if (!query.exec()) {
+        if (errorMessage) *errorMessage = query.lastError().text();
+        return false;
+    }
+    if (query.numRowsAffected() == 0) {
+        if (errorMessage) *errorMessage = "The snippet no longer exists in the database.";
+        return false;
+    }
+    return true;
 }
 
-bool Database::deleteSnippet(int id)
+bool Database::deleteSnippet(int id, QString* errorMessage)
 {
     QSqlQuery query(m_db);
     query.prepare("DELETE FROM snippets WHERE id = ?");
     query.addBindValue(id);
-    
-    return query.exec();
+
+    if (!query.exec()) {
+        if (errorMessage) *errorMessage = query.lastError().text();
+        return false;
+    }
+    return true;
 }
 
 Snippet Database::getSnippet(int id)

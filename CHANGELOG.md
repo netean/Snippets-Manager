@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0 (in development)
+
+New features are being built on `main`. Fixes for 1.x go on the `v1` branch.
+
+## 1.3
+
+Safety and reliability fixes.
+
+### New
+- **Clipboard options** (File > Settings...): turn off copying a snippet when it's selected or clicked, and keep copied snippets out of clipboard history (for clipboard managers that support it, such as KDE's Klipper).
+
+### Fixed
+- Edits are no longer lost when a snippet can't be saved (for example, when the database's drive is unavailable). You're told what went wrong, the changes stay in the editor, and quitting asks before discarding them.
+- If the database can't be opened at startup, you're told why instead of getting an app that silently can't save. If the app has to fall back to the default database, it says so.
+- The database file is now only readable by your user account. Existing default databases are tightened on the next start, and moved or newly created databases are made private too.
+- Opening a SQLite file that isn't a snippets database no longer adds a table to it. The file is left unchanged.
+- Searching for `_` or `%` finds those characters, instead of treating them as wildcards.
+- Snippet titles and file paths in dialogs are shown exactly as written, never as formatting.
+- The application menu entry no longer offers to open text files (which it couldn't do).
+- `install.sh` writes a working menu entry when the install path contains spaces or special characters.
+
 ## 1.2
 
 ### New

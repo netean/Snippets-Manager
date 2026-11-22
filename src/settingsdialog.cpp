@@ -1,5 +1,8 @@
 #include "settingsdialog.h"
 #include "database.h"
+#include "messagebox.h"
+#include <QCheckBox>
+#include <QSettings>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QLabel>
@@ -10,7 +13,6 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDir>
-#include <QMessageBox>
 #include <QDesktopServices>
 #include <QUrl>
 
@@ -49,10 +51,26 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     actionLayout->addStretch();
     groupLayout->addLayout(actionLayout);
 
+    QGroupBox *clipboardGroup = new QGroupBox("Clipboard");
+    QVBoxLayout *clipboardLayout = new QVBoxLayout(clipboardGroup);
+    QSettings settings;
+
+    QCheckBox *copyOnSelectCheck = new QCheckBox("Copy a snippet when it's selected or its content is clicked");
+    copyOnSelectCheck->setToolTip("When off, snippets are only copied with the Copy button");
+    copyOnSelectCheck->setChecked(settings.value(SettingsKeys::CopyOnSelect, true).toBool());
+    clipboardLayout->addWidget(copyOnSelectCheck);
+
+    QCheckBox *hideFromHistoryCheck = new QCheckBox("Keep copied snippets out of clipboard history");
+    hideFromHistoryCheck->setToolTip("Marks copied snippets as sensitive, so clipboard managers that respect this "
+                                     "(such as KDE's Klipper) don't save them. Useful if you store passwords or tokens.");
+    hideFromHistoryCheck->setChecked(settings.value(SettingsKeys::HideFromHistory, false).toBool());
+    clipboardLayout->addWidget(hideFromHistoryCheck);
+
     QDialogButtonBox *buttonBox = new QDialogButtonBox(QDialogButtonBox::Close);
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->addWidget(databaseGroup);
+    mainLayout->addWidget(clipboardGroup);
     mainLayout->addStretch();
     mainLayout->addWidget(buttonBox);
 
@@ -63,8 +81,26 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     connect(openButton, &QPushButton::clicked, this, &SettingsDialog::onOpenDatabase);
     connect(createButton, &QPushButton::clicked, this, &SettingsDialog::onCreateDatabase);
     connect(buttonBox, &QDialogButtonBox::rejected, this, &QDialog::reject);
+    connect(copyOnSelectCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        QSettings().setValue(SettingsKeys::CopyOnSelect, checked);
+        emit clipboardSettingsChanged();
+    });
+    connect(hideFromHistoryCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        QSettings().setValue(SettingsKeys::HideFromHistory, checked);
+        emit clipboardSettingsChanged();
+    });
 
     updatePathDisplay();
+}
+
+void SettingsDialog::setSavePendingChanges(std::function<bool()> savePendingChanges)
+{
+    m_savePendingChanges = std::move(savePendingChanges);
+}
+
+bool SettingsDialog::savePendingChanges()
+{
+    return !m_savePendingChanges || m_savePendingChanges();
 }
 
 void SettingsDialog::updatePathDisplay()
@@ -85,11 +121,11 @@ void SettingsDialog::onMoveDatabase()
     QString newPath = QFileDialog::getSaveFileName(this, "Move Database To", suggested, DatabaseFileFilter);
     if (newPath.isEmpty()) return;
 
-    emit aboutToChangeDatabase();
+    if (!savePendingChanges()) return;
 
     QString error;
     if (!Database::instance().moveDatabase(newPath, &error)) {
-        QMessageBox::warning(this, "Move Database", "The database could not be moved.\n\n" + error);
+        MessageBox::warning(this, "Move Database", "The database could not be moved.\n\n" + error);
         return;
     }
 
@@ -102,11 +138,11 @@ void SettingsDialog::onOpenDatabase()
     QString path = QFileDialog::getOpenFileName(this, "Open Database", startDirectory(), DatabaseFileFilter);
     if (path.isEmpty()) return;
 
-    emit aboutToChangeDatabase();
+    if (!savePendingChanges()) return;
 
     QString error;
     if (!Database::instance().openDatabase(path, &error)) {
-        QMessageBox::warning(this, "Open Database", "The database could not be opened.\n\n" + error);
+        MessageBox::warning(this, "Open Database", "The database could not be opened.\n\n" + error);
         return;
     }
 
@@ -123,17 +159,17 @@ void SettingsDialog::onCreateDatabase()
     if (QFileInfo(path).suffix().isEmpty()) {
         path += ".db";
         if (QFileInfo::exists(path) &&
-            QMessageBox::question(this, "Create New Database",
-                                  QString("'%1' already exists. Replace it?").arg(path)) != QMessageBox::Yes) {
+            !MessageBox::question(this, "Create New Database",
+                                  QString("'%1' already exists. Replace it?").arg(QDir::toNativeSeparators(path)))) {
             return;
         }
     }
 
-    emit aboutToChangeDatabase();
+    if (!savePendingChanges()) return;
 
     QString error;
     if (!Database::instance().createDatabase(path, &error)) {
-        QMessageBox::warning(this, "Create New Database", "The database could not be created.\n\n" + error);
+        MessageBox::warning(this, "Create New Database", "The database could not be created.\n\n" + error);
         return;
     }
 

@@ -24,6 +24,7 @@ public:
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private slots:
     void onSelectionChanged(const QModelIndex &current);
@@ -44,7 +45,12 @@ private:
     void setupUI();
     void setupMenus();
     void updateButtonStates();
-    void saveCurrentSnippet();
+    // Saves pending edits; returns true if there was nothing to save or the save worked
+    bool saveCurrentSnippet(QString *errorMessage = nullptr);
+    // Like saveCurrentSnippet, but tells the user if the save failed
+    bool ensureSaved();
+    void copyToClipboard(const QString &text);
+    bool copyOnSelect() const;
     void loadSnippet(int id);
     void selectSnippet(int id);
     void setContentEditable(bool editable);

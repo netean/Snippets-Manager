@@ -25,7 +25,10 @@ public:
     };
 
     static Database& instance();
-    bool initialize();
+
+    // Opens the saved database, falling back to the default location if it
+    // can't be opened. On fallback, warningMessage explains what happened.
+    bool initialize(QString* errorMessage = nullptr, QString* warningMessage = nullptr);
 
     // Database file management
     static QString defaultDatabasePath();
@@ -37,15 +40,17 @@ public:
     QList<Snippet> getAllSnippets(SortOrder order = CreatedDescending);
     QList<Snippet> searchSnippets(const QString& searchTerm, SortOrder order = CreatedDescending);
     int addSnippet(const QString& title, const QString& content);
-    bool updateSnippet(int id, const QString& title, const QString& content);
-    bool deleteSnippet(int id);
+    bool updateSnippet(int id, const QString& title, const QString& content, QString* errorMessage = nullptr);
+    bool deleteSnippet(int id, QString* errorMessage = nullptr);
     Snippet getSnippet(int id);
 
 private:
     Database() = default;
     QSqlDatabase m_db;
+    bool prepareSchema(QString* errorMessage);
     bool createTables();
     bool openAt(const QString& path, QString* errorMessage);
+    static void restrictPermissions(const QString& path);
     static QString orderByClause(SortOrder order);
     static QList<Snippet> readSnippets(QSqlQuery& query);
 };

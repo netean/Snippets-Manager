@@ -196,7 +196,20 @@ $SUDO cmake --install "$BUILD_DIR" --prefix "$PREFIX" >/dev/null || die "Install
 # prefix's bin directory isn't on the desktop session's PATH (common for ~/.local/bin)
 desktop_file="$PREFIX/share/applications/$BINARY.desktop"
 if [[ -f "$desktop_file" ]]; then
-    $SUDO sed -i "s|^Exec=.*|Exec=$PREFIX/bin/$BINARY|" "$desktop_file"
+    exec_path="$PREFIX/bin/$BINARY"
+    # The desktop entry spec needs paths with spaces or special characters quoted,
+    # with " ` $ and \ escaped inside the quotes (and \ escaped again for the file)
+    if [[ "$exec_path" =~ [^A-Za-z0-9_./+-] ]]; then
+        escaped="${exec_path//\\/\\\\\\\\}"
+        escaped="${escaped//\"/\\\\\"}"
+        escaped="${escaped//\`/\\\\\`}"
+        escaped="${escaped//\$/\\\\\$}"
+        exec_path="\"$escaped\""
+    fi
+    # awk reads the value from the environment, so no characters in the path are special
+    EXEC_LINE="Exec=$exec_path" awk '/^Exec=/ { print ENVIRON["EXEC_LINE"]; next } { print }' "$desktop_file" \
+        | $SUDO tee "$desktop_file.tmp" >/dev/null
+    $SUDO mv "$desktop_file.tmp" "$desktop_file"
 fi
 
 refresh_desktop_caches
