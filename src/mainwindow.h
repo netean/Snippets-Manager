@@ -4,7 +4,10 @@
 #include <QMainWindow>
 #include "snippetmodel.h"
 
+class GlobalShortcut;
 class QAction;
+class QSystemTrayIcon;
+class QuickSearch;
 class QComboBox;
 class QLabel;
 class QLineEdit;
@@ -21,6 +24,12 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
+
+    // Handles a command from the command line or another launch:
+    // "show", or "popup [activation token]" for the quick search
+    void handleCommand(const QString &command);
+    // Whether the app can keep running without its window (in the tray)
+    bool canRunInBackground() const;
 
 protected:
     bool eventFilter(QObject *watched, QEvent *event) override;
@@ -45,6 +54,11 @@ private slots:
     void onEmptyTrash();
     void onImport();
     void onExport();
+    void onQuit();
+    void applyQuickAccessSettings();
+    void showWindow();
+    void showQuickSearch(const QString &activationToken = QString());
+    void openSnippet(int id);
     void onAbout();
 
 private:
@@ -99,6 +113,12 @@ private:
     bool m_updatingSelection = false;
     // Snippets moved to the trash, most recent last, for Undo Delete
     QList<int> m_recentlyTrashed;
+
+    QSystemTrayIcon *m_tray = nullptr;
+    QuickSearch *m_quickSearch = nullptr;
+    GlobalShortcut *m_globalShortcut = nullptr;
+    // Set by File > Quit, so closing the window really quits
+    bool m_quitting = false;
     QTimer *m_searchTimer = nullptr;
 };
 

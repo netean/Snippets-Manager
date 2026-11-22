@@ -224,8 +224,11 @@ if [[ -f "$desktop_file" ]]; then
         escaped="${escaped//\$/\\\\\$}"
         exec_path="\"$escaped\""
     fi
-    # awk reads the value from the environment, so no characters in the path are special
-    EXEC_LINE="Exec=$exec_path" awk '/^Exec=/ { print ENVIRON["EXEC_LINE"]; next } { print }' "$desktop_file" \
+    # awk reads the value from the environment, so no characters in the path are
+    # special. Arguments after the command (e.g. --popup) are kept.
+    EXEC_LINE="Exec=$exec_path" awk '
+        index($0, "Exec=snippetmanager") == 1 { print ENVIRON["EXEC_LINE"] substr($0, 20); next }
+        { print }' "$desktop_file" \
         | $SUDO tee "$desktop_file.tmp" >/dev/null
     $SUDO mv "$desktop_file.tmp" "$desktop_file"
 fi

@@ -4,7 +4,11 @@
 #include <QDialog>
 #include <functional>
 
+class GlobalShortcut;
+class QCheckBox;
+class QLabel;
 class QLineEdit;
+class QPushButton;
 class QTabWidget;
 
 // QSettings keys shared between the settings dialog and the main window
@@ -19,6 +23,10 @@ inline constexpr char Placeholders[] = "clipboard/placeholders";
 inline constexpr char RichText[] = "editor/richText";
 // Colour code snippets by their language (when the build supports it)
 inline constexpr char SyntaxHighlighting[] = "editor/syntaxHighlighting";
+// Show a tray icon, and keep running there when the window is closed
+inline constexpr char TrayIcon[] = "quickAccess/trayIcon";
+// Open the quick search with a system-wide keyboard shortcut
+inline constexpr char GlobalShortcut[] = "quickAccess/globalShortcut";
 }
 
 class SettingsDialog : public QDialog
@@ -31,6 +39,8 @@ public:
     // Called just before the active database is replaced, so pending edits can
     // be saved. If it returns false the database is left as it is.
     void setSavePendingChanges(std::function<bool()> savePendingChanges);
+    // The active global shortcut (or null), to show which keys it uses
+    void setGlobalShortcut(GlobalShortcut *shortcut);
 
 signals:
     // Emitted after a different database file has become the active one
@@ -39,6 +49,8 @@ signals:
     void clipboardSettingsChanged();
     // Emitted when one of the editor options is changed
     void editorSettingsChanged();
+    // Emitted when the tray or global shortcut options are changed
+    void quickAccessSettingsChanged();
 
 private slots:
     void onMoveDatabase();
@@ -50,8 +62,13 @@ private:
     QString startDirectory() const;
     bool savePendingChanges();
 
+    void updateShortcutStatus();
+
     QLineEdit *m_pathEdit;
     QTabWidget *m_tabs;
+    QLabel *m_shortcutStatus = nullptr;
+    QPushButton *m_changeShortcutButton = nullptr;
+    GlobalShortcut *m_globalShortcut = nullptr;
     std::function<bool()> m_savePendingChanges;
 };
 

@@ -1,7 +1,9 @@
 #include "mainwindow.h"
 #include "clipboard.h"
 #include "database.h"
+#include "globalshortcut.h"
 #include "importexport.h"
+#include "quicksearch.h"
 #include "messagebox.h"
 #include "settingsdialog.h"
 #include "snippeteditor.h"
@@ -26,6 +28,7 @@
 #include <QSettings>
 #include <QSplitter>
 #include <QStatusBar>
+#include <QSystemTrayIcon>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -91,11 +94,126 @@ MainWindow::MainWindow(QWidget *parent)
         resize(900, 600);
     }
     m_splitter->restoreState(settings.value(SplitterKey).toByteArray());
+
+    m_quickSearch = new QuickSearch;
+    connect(m_quickSearch, &QuickSearch::openRequested, this, &MainWindow::openSnippet);
+    connect(m_quickSearch, &QuickSearch::copied, this, [this](const QString &title) {
+        statusBar()->showMessage(QString("Copied '%1'").arg(title), 4000);
+    });
+    applyQuickAccessSettings();
 }
 
 MainWindow::~MainWindow()
 {
     saveCurrentSnippet();
+    delete m_quickSearch;
+}
+
+bool MainWindow::canRunInBackground() const
+{
+    return m_tray && m_tray->isVisible();
+}
+
+void MainWindow::applyQuickAccessSettings()
+{
+    QSettings settings;
+
+    // Tray icon
+    bool wantTray = settings.value(SettingsKeys::TrayIcon, true).toBool() && QSystemTrayIcon::isSystemTrayAvailable();
+    if (wantTray && !m_tray) {
+        m_tray = new QSystemTrayIcon(QApplication::windowIcon(), this);
+        m_tray->setToolTip("Snippet Manager");
+        QMenu *menu = new QMenu(this);
+        menu->addAction("&Quick Search", this, [this]() { showQuickSearch(); });
+        menu->addAction("&Show Snippet Manager", this, &MainWindow::showWindow);
+        menu->addSeparator();
+        menu->addAction("&Quit", this, &MainWindow::onQuit);
+        m_tray->setContextMenu(menu);
+        connect(m_tray, &QSystemTrayIcon::activated, this, [this](QSystemTrayIcon::ActivationReason reason) {
+            if (reason == QSystemTrayIcon::Trigger) {
+                if (isVisible() && isActiveWindow()) {
+                    close();  // hides to the tray
+                } else {
+                    showWindow();
+                }
+            } else if (reason == QSystemTrayIcon::MiddleClick) {
+                showQuickSearch();
+            }
+        });
+        m_tray->show();
+    } else if (!wantTray && m_tray) {
+        delete m_tray;
+        m_tray = nullptr;
+    }
+    // With a tray icon, closing the window leaves the app running
+    QApplication::setQuitOnLastWindowClosed(!m_tray);
+
+    // Global shortcut
+    bool wantShortcut = settings.value(SettingsKeys::GlobalShortcut, false).toBool();
+    if (wantShortcut && !m_globalShortcut && GlobalShortcut::isSupported()) {
+        m_globalShortcut = new GlobalShortcut(this);
+        connect(m_globalShortcut, &GlobalShortcut::activated, this, &MainWindow::showQuickSearch);
+        m_globalShortcut->enable();
+    } else if (!wantShortcut && m_globalShortcut) {
+        delete m_globalShortcut;
+        m_globalShortcut = nullptr;
+    }
+}
+
+void MainWindow::handleCommand(const QString &command)
+{
+    if (command == "popup" || command.startsWith("popup ")) {
+        showQuickSearch(command.mid(6).trimmed());
+    } else if (command == "show") {
+        showWindow();
+    }
+}
+
+void MainWindow::showWindow()
+{
+    if (isMinimized()) {
+        showNormal();
+    } else {
+        show();
+    }
+    raise();
+    activateWindow();
+}
+
+void MainWindow::showQuickSearch(const QString &activationToken)
+{
+    if (!ensureSaved()) {
+        showWindow();
+        return;
+    }
+    m_quickSearch->popup(activationToken);
+}
+
+void MainWindow::openSnippet(int id)
+{
+    showWindow();
+    if (!ensureSaved()) return;
+    // Show it in the full list, so it's visible
+    m_searchEdit->clear();
+    if (m_tagFilterCombo->currentIndex() != 0) {
+        m_tagFilterCombo->setCurrentIndex(0);
+    }
+    m_model->search(QString());
+    selectSnippet(id);
+    loadSnippet(id);
+}
+
+void MainWindow::onQuit()
+{
+    m_quitting = true;
+    // Closing saves (or asks about) unsaved changes; it can be cancelled
+    bool closed = isVisible() ? close() : ensureSaved();
+    m_quitting = false;
+    if (!closed) {
+        showWindow();
+        return;
+    }
+    QApplication::quit();
 }
 
 void MainWindow::setupUI()
@@ -272,7 +390,7 @@ void MainWindow::setupMenus()
 
     QAction *quitAction = fileMenu->addAction("&Quit");
     quitAction->setShortcut(QKeySequence::Quit);
-    connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+    connect(quitAction, &QAction::triggered, this, &MainWindow::onQuit);
 
     QMenu *editMenu = menuBar()->addMenu("&Edit");
     editMenu->addAction(m_undoDeleteAction);
@@ -486,6 +604,19 @@ void MainWindow::closeEvent(QCloseEvent *event)
     QSettings settings;
     settings.setValue(GeometryKey, saveGeometry());
     settings.setValue(SplitterKey, m_splitter->saveState());
+
+    // With a tray icon, closing the window just hides it
+    if (!m_quitting && canRunInBackground()) {
+        hide();
+        event->ignore();
+        if (!settings.value("quickAccess/trayHintShown", false).toBool()) {
+            settings.setValue("quickAccess/trayHintShown", true);
+            m_tray->showMessage("Snippet Manager is still running",
+                                "It's in the system tray, ready for quick search. Use File > Quit to close it completely.",
+                                QSystemTrayIcon::Information, 6000);
+        }
+        return;
+    }
     event->accept();
 }
 
@@ -839,6 +970,11 @@ void MainWindow::onShowSettings()
     dialog.setSavePendingChanges([this]() { return ensureSaved(); });
     connect(&dialog, &SettingsDialog::clipboardSettingsChanged, this, &MainWindow::updateModeLabel);
     connect(&dialog, &SettingsDialog::editorSettingsChanged, m_editor, &SnippetEditor::applySettings);
+    connect(&dialog, &SettingsDialog::quickAccessSettingsChanged, this, [this, &dialog]() {
+        applyQuickAccessSettings();
+        dialog.setGlobalShortcut(m_globalShortcut);
+    });
+    dialog.setGlobalShortcut(m_globalShortcut);
     connect(&dialog, &SettingsDialog::databaseChanged, this, &MainWindow::onDatabaseChanged);
     dialog.exec();
 }

@@ -1,4 +1,5 @@
 #include "snippetmodel.h"
+#include "richtext.h"
 
 SnippetModel::SnippetModel(QObject *parent)
     : QAbstractListModel(parent)
@@ -31,6 +32,20 @@ QVariant SnippetModel::data(const QModelIndex &index, int role) const
         return snippet.created;
     case ModifiedRole:
         return snippet.modified;
+    case PreviewRole: {
+        auto it = m_previews.constFind(snippet.id);
+        if (it != m_previews.constEnd()) return *it;
+        QString text = snippet.isRich() ? RichText::toPlainText(snippet.content) : snippet.content;
+        QString preview;
+        for (const QString &line : text.split('\n')) {
+            if (!line.trimmed().isEmpty()) {
+                preview = line.trimmed().left(200);
+                break;
+            }
+        }
+        m_previews.insert(snippet.id, preview);
+        return preview;
+    }
     default:
         return QVariant();
     }
@@ -50,6 +65,7 @@ QHash<int, QByteArray> SnippetModel::roleNames() const
 void SnippetModel::refresh()
 {
     beginResetModel();
+    m_previews.clear();
     m_snippets = Database::instance().snippets(m_filter, m_sortOrder);
     endResetModel();
 }

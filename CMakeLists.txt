@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.19)
 # The application version. This is the only place it's set: the app, the
 # Windows and macOS metadata and the AppImage file name all read it from here.
 project(SnippetManager VERSION 1.3 LANGUAGES CXX)
@@ -57,6 +57,14 @@ add_library(snippetcore STATIC
     src/importexport.h
     src/placeholders.cpp
     src/placeholders.h
+    src/quicksearch.cpp
+    src/quicksearch.h
+    src/singleinstance.cpp
+    src/singleinstance.h
+    src/globalshortcut.cpp
+    src/globalshortcut.h
+    src/autostart.cpp
+    src/autostart.h
     src/mainwindow.cpp
     src/mainwindow.h
     src/settingsdialog.cpp

@@ -1,6 +1,10 @@
 #include "database.h"
 #include "mainwindow.h"
+#include "autostart.h"
 #include "richtext.h"
+#include "singleinstance.h"
+#include <QSignalSpy>
+#include <QStandardPaths>
 #include <QMimeData>
 #include <QApplication>
 #include <QClipboard>
@@ -322,6 +326,65 @@ private slots:
         QSettings().setValue("clipboard/placeholders", false);
         QTest::keyClick(m_window, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier);
         QCOMPARE(QApplication::clipboard()->text(), QString("Sent {{date}}"));
+    }
+
+    void quickSearchCopiesAndOpens()
+    {
+        Database::instance().addSnippet("Address", "1 Main Street");
+        Database::instance().addSnippet("Phone", "555 {{date:yyyy}}");
+        reload();
+        m_window->handleCommand("popup");
+        QWidget *popup = nullptr;
+        for (QWidget *widget : QApplication::topLevelWidgets()) {
+            if (widget->objectName() == "quickSearch") popup = widget;
+        }
+        QVERIFY(popup);
+        QVERIFY(popup->isVisible());
+        auto *search = popup->findChild<QLineEdit *>("quickSearchEdit");
+        auto *results = popup->findChild<QListView *>("quickSearchList");
+        QCOMPARE(results->model()->rowCount(), 2);
+
+        // Typing filters; Enter copies (filling in placeholders) and closes
+        QTest::keyClicks(search, "phone");
+        QCOMPARE(results->model()->rowCount(), 1);
+        QTest::keyClick(search, Qt::Key_Return);
+        QCOMPARE(QApplication::clipboard()->text(), "555 " + QString::number(QDate::currentDate().year()));
+        QVERIFY(!popup->isVisible());
+
+        // Ctrl+Enter shows the snippet in the main window instead
+        m_window->handleCommand("popup");
+        QTest::keyClicks(search, "address");
+        QTest::keyClick(search, Qt::Key_Return, Qt::ControlModifier);
+        QVERIFY(!popup->isVisible());
+        QCOMPARE(m_title->text(), QString("Address"));
+    }
+
+    void commandsReachTheRunningCopy()
+    {
+        QVERIFY(!SingleInstance::sendToRunning("show"));
+        SingleInstance instance;
+        QVERIFY(instance.listen());
+        QSignalSpy received(&instance, &SingleInstance::commandReceived);
+        QVERIFY(SingleInstance::sendToRunning("popup token-123"));
+        QVERIFY(received.wait(2000));
+        QCOMPARE(received.first().first().toString(), QString("popup token-123"));
+    }
+
+    void startAtLoginWritesDesktopFile()
+    {
+#if defined(Q_OS_LINUX)
+        QVERIFY(Autostart::setEnabled(true));
+        QVERIFY(Autostart::isEnabled());
+        QFile file(QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
+                   + "/autostart/io.github.netean.SnippetManager.desktop");
+        QVERIFY(file.open(QIODevice::ReadOnly));
+        QVERIFY(file.readAll().contains(" --background\n"));
+        QVERIFY(Autostart::setEnabled(false));
+        QVERIFY(!Autostart::isEnabled());
+#endif
+        QCOMPARE(Autostart::desktopExecQuote("/usr/bin/snippetmanager"), QString("/usr/bin/snippetmanager"));
+        QCOMPARE(Autostart::desktopExecQuote("/opt/My Apps/app"), QString("\"/opt/My Apps/app\""));
+        QCOMPARE(Autostart::desktopExecQuote("/x/a\"b$c"), QString("\"/x/a\\\\\"b\\\\$c\""));
     }
 
 private:

@@ -14,7 +14,9 @@ public:
         TitleRole,
         ContentRole,
         CreatedRole,
-        ModifiedRole
+        ModifiedRole,
+        // The first line of the content, as plain text
+        PreviewRole
     };
 
     explicit SnippetModel(QObject *parent = nullptr);
@@ -38,6 +40,7 @@ public:
 private:
     QList<Snippet> m_snippets;
     SnippetFilter m_filter;
+    mutable QHash<int, QString> m_previews;
     Database::SortOrder m_sortOrder = Database::CreatedDescending;
 };
 
