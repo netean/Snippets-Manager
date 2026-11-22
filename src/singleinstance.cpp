@@ -55,8 +55,7 @@ bool SingleInstance::listen()
     }
     connect(m_server, &QLocalServer::newConnection, this, [this]() {
         while (QLocalSocket *socket = m_server->nextPendingConnection()) {
-            connect(socket, &QLocalSocket::disconnected, socket, &QObject::deleteLater);
-            connect(socket, &QLocalSocket::readyRead, this, [this, socket]() {
+            auto readCommands = [this, socket]() {
                 while (socket->canReadLine()) {
                     // Commands are short; ignore anything that isn't
                     QString command = QString::fromUtf8(socket->readLine(1024)).trimmed();
@@ -64,7 +63,16 @@ bool SingleInstance::listen()
                         emit commandReceived(command);
                     }
                 }
+            };
+            connect(socket, &QLocalSocket::readyRead, this, readCommands);
+            // The sender may finish before we get here (it disconnects straight
+            // after writing), so read what has already arrived, and what's left
+            // when it disconnects
+            connect(socket, &QLocalSocket::disconnected, this, [socket, readCommands]() {
+                readCommands();
+                socket->deleteLater();
             });
+            readCommands();
         }
     });
     return true;

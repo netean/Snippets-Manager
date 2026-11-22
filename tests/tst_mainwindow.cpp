@@ -1,3 +1,4 @@
+#include "testenv.h"
 #include "database.h"
 #include "mainwindow.h"
 #include "autostart.h"

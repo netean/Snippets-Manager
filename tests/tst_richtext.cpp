@@ -1,3 +1,4 @@
+#include "testenv.h"
 #include "richtext.h"
 #include <QTextCursor>
 #include <QTextDocument>

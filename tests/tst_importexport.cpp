@@ -1,3 +1,4 @@
+#include "testenv.h"
 #include "database.h"
 #include "importexport.h"
 #include <QFile>

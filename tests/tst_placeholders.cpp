@@ -1,3 +1,4 @@
+#include "testenv.h"
 #include "placeholders.h"
 #include "richtext.h"
 #include <QtTest>
