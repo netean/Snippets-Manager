@@ -19,7 +19,7 @@ Used and tested on Fedora and CachyOs
 
 
 > [!NOTE] 
-> This is 99.9% vibe coded with Claude
+> This is 99.9% vibe coded with Claude - originally with Amazon Kiro/Claude and then latterly directly with Claude Code (Opus 5.5)
 > I haven't been a coder for about 20 years and even back it wasn't with C++. My C++/QT coding is basically ZERO 
 > I have asked Claude to check this for security issues (for every build)  and I do have Dependabot running on this repo to keep track of any issues.
 > But if vibe coded apps aren't your thing, this project isn't for you I'm afraid.
