@@ -39,6 +39,8 @@ public:
     bool isContentEditable() const;
 
     void setKnownTags(const QStringList &tags);
+    // Prevents any changes (for snippets in the trash)
+    void setLocked(bool locked);
     // Re-reads the editor settings (rich text on or off)
     void applySettings();
 
@@ -87,6 +89,7 @@ private:
     // Whether the content is currently displayed with formatting (rather than
     // as plain text or Markdown source)
     bool m_formatted = false;
+    bool m_locked = false;
 
     QLineEdit *m_titleEdit;
     TagEdit *m_tagEdit;

@@ -121,24 +121,57 @@ private slots:
         QCOMPARE(m_list->model()->rowCount(), 2);
     }
 
-    void deleteAsksFirst()
+    void deleteMovesToTrashAndUndoes()
     {
         Database::instance().addSnippet("Doomed", "x");
+        Database::instance().addSnippet("Other", "y");
         reload();
         selectRow(0);
+        QString title = m_title->text();
 
-        // The Delete key in the list asks first; answering No keeps the snippet
-        answerNextQuestion(QMessageBox::No);
+        // Delete doesn't ask: it can be undone
         m_list->setFocus();
         QTest::keyClick(m_list, Qt::Key_Delete);
         QCOMPARE(Database::instance().snippets().size(), 1);
+        QCOMPARE(Database::instance().trashCount(), 1);
+        QCOMPARE(m_list->model()->rowCount(), 1);
+        QVERIFY(m_tagFilter->findText("Trash (1)") >= 0);
 
-        // The Delete button asks too; answering Yes deletes it
+        // Ctrl+Z (outside a text field) brings it back
+        m_list->setFocus();
+        QTest::keyClick(m_window, Qt::Key_Z, Qt::ControlModifier);
+        QCOMPARE(Database::instance().snippets().size(), 2);
+        QCOMPARE(Database::instance().trashCount(), 0);
+        QCOMPARE(m_title->text(), title);
+    }
+
+    void trashViewRestoresAndDeletesForever()
+    {
+        int a = Database::instance().addSnippet("A", "a");
+        int b = Database::instance().addSnippet("B", "b");
+        Database::instance().moveToTrash(a);
+        Database::instance().moveToTrash(b);
+        reload();
+        m_tagFilter->setCurrentIndex(m_tagFilter->findText("Trash (2)"));
+        QCOMPARE(m_list->model()->rowCount(), 2);
+
+        // Snippets in the trash can't be edited
+        selectRow(0);
+        QVERIFY(m_title->isReadOnly());
+        QVERIFY(m_content->isReadOnly());
+
+        m_window->findChild<QPushButton *>("restoreButton")->click();
+        QCOMPARE(Database::instance().snippets().size(), 1);
+        QCOMPARE(m_list->model()->rowCount(), 1);
+
+        // Deleting forever asks first
+        selectRow(0);
+        answerNextQuestion(QMessageBox::No);
+        m_window->findChild<QPushButton *>("deleteButton")->click();
+        QCOMPARE(Database::instance().trashCount(), 1);
         answerNextQuestion(QMessageBox::Yes);
-        QPushButton *deleteButton = m_window->findChild<QPushButton *>("deleteButton");
-        QVERIFY(deleteButton);
-        deleteButton->click();
-        QCOMPARE(Database::instance().snippets().size(), 0);
+        m_window->findChild<QPushButton *>("deleteButton")->click();
+        QCOMPARE(Database::instance().trashCount(), 0);
         QCOMPARE(m_list->model()->rowCount(), 0);
     }
 

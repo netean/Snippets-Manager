@@ -371,6 +371,41 @@ private slots:
         QCOMPARE(search("elsewhere").size(), 1);
     }
 
+    void trashKeepsSnippetsUntilEmptied()
+    {
+        Database& db = Database::instance();
+        QVERIFY(db.createDatabase(m_dir.filePath("trash.db")));
+        Snippet tagged;
+        tagged.title = "tagged";
+        tagged.tags = {"keep"};
+        int id = db.addSnippet(tagged);
+        int other = db.addSnippet("other", "");
+
+        QVERIFY(db.moveToTrash(id));
+        QVERIFY(!db.moveToTrash(id));  // already there
+        QCOMPARE(db.snippets().size(), 1);
+        QCOMPARE(db.trashCount(), 1);
+        // Tag counts only include snippets that aren't in the trash, but the tag is kept
+        QVERIFY(db.tagCounts().isEmpty());
+        SnippetFilter trash;
+        trash.trash = true;
+        QList<Snippet> trashed = db.snippets(trash);
+        QCOMPARE(trashed.size(), 1);
+        QVERIFY(trashed[0].inTrash());
+        QCOMPARE(trashed[0].tags, QStringList({"keep"}));
+
+        QVERIFY(db.restoreFromTrash(id));
+        QCOMPARE(db.snippet(id).tags, QStringList({"keep"}));
+        QVERIFY(!db.snippet(id).inTrash());
+
+        QVERIFY(db.moveToTrash(id));
+        QVERIFY(db.moveToTrash(other));
+        QVERIFY(db.emptyTrash());
+        QCOMPARE(db.trashCount(), 0);
+        QCOMPARE(db.snippets().size(), 0);
+        QVERIFY(!db.snippet(id).isValid());
+    }
+
 private:
     static QList<Snippet> search(const QString& term)
     {

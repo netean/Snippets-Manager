@@ -79,6 +79,12 @@ public:
     // Deletes permanently (see moveToTrash)
     bool deleteSnippet(int id, QString* errorMessage = nullptr);
 
+    // The trash: snippets moved there keep everything and can be restored
+    bool moveToTrash(int id, QString* errorMessage = nullptr);
+    bool restoreFromTrash(int id, QString* errorMessage = nullptr);
+    bool emptyTrash(QString* errorMessage = nullptr);
+    int trashCount();
+
     // Whether searches use the full-text index (ranked by relevance), rather
     // than a plain substring search
     bool hasSearchIndex() const { return m_searchIndex; }

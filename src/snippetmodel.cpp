@@ -67,6 +67,12 @@ void SnippetModel::setTagFilter(const QString &tag, bool untagged)
     refresh();
 }
 
+void SnippetModel::setShowTrash(bool trash)
+{
+    m_filter.trash = trash;
+    refresh();
+}
+
 void SnippetModel::setSortOrder(Database::SortOrder order)
 {
     m_sortOrder = order;

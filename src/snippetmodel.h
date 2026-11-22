@@ -28,6 +28,9 @@ public:
     void setSortOrder(Database::SortOrder order);
     // Only show snippets with this tag (or without tags, if untagged is true)
     void setTagFilter(const QString &tag, bool untagged);
+    // Show the snippets in the trash instead of the others
+    void setShowTrash(bool trash);
+    bool showsTrash() const { return m_filter.trash; }
     Database::SortOrder sortOrder() const;
     Snippet getSnippet(int row) const;
     int rowForId(int id) const;

@@ -40,6 +40,9 @@ private slots:
     void onShowSettings();
     void onDatabaseChanged();
     void onShowDetails();
+    void onRestoreSnippet();
+    void onUndoDelete();
+    void onEmptyTrash();
     void onAbout();
 
 private:
@@ -57,6 +60,7 @@ private:
     void loadSnippet(int id);
     void selectSnippet(int id);
     void setContentEditable(bool editable);
+    bool inTrashView() const;
     bool copyOnSelect() const;
     int currentId() const;
 
@@ -70,6 +74,7 @@ private:
     QPushButton *m_addButton = nullptr;
     QPushButton *m_editButton = nullptr;
     QPushButton *m_deleteButton = nullptr;
+    QPushButton *m_restoreButton = nullptr;
 
     // Right panel
     QLabel *m_modeLabel = nullptr;
@@ -84,9 +89,14 @@ private:
     QAction *m_deleteAction = nullptr;
     QAction *m_findAction = nullptr;
     QAction *m_detailsAction = nullptr;
+    QAction *m_restoreAction = nullptr;
+    QAction *m_undoDeleteAction = nullptr;
+    QAction *m_emptyTrashAction = nullptr;
 
     SnippetModel *m_model = nullptr;
     bool m_updatingSelection = false;
+    // Snippets moved to the trash, most recent last, for Undo Delete
+    QList<int> m_recentlyTrashed;
     QTimer *m_searchTimer = nullptr;
 };
 

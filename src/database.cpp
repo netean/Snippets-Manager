@@ -775,6 +775,59 @@ bool Database::updateSnippet(const Snippet& snippet, QString* errorMessage)
     return true;
 }
 
+bool Database::moveToTrash(int id, QString* errorMessage)
+{
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE snippets SET deleted_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL");
+    query.addBindValue(id);
+    if (!exec(query, errorMessage)) return false;
+    if (query.numRowsAffected() == 0) {
+        if (errorMessage) *errorMessage = "The snippet no longer exists, or is already in the trash.";
+        return false;
+    }
+    return true;
+}
+
+bool Database::restoreFromTrash(int id, QString* errorMessage)
+{
+    QSqlQuery query(m_db);
+    query.prepare("UPDATE snippets SET deleted_at = NULL WHERE id = ? AND deleted_at IS NOT NULL");
+    query.addBindValue(id);
+    if (!exec(query, errorMessage)) return false;
+    if (query.numRowsAffected() == 0) {
+        if (errorMessage) *errorMessage = "The snippet is no longer in the trash.";
+        return false;
+    }
+    return true;
+}
+
+bool Database::emptyTrash(QString* errorMessage)
+{
+    QSqlQuery query(m_db);
+    if (!query.exec("SELECT id FROM snippets WHERE deleted_at IS NOT NULL")) {
+        if (errorMessage) *errorMessage = query.lastError().text();
+        return false;
+    }
+    QList<int> ids;
+    while (query.next()) ids.append(query.value(0).toInt());
+    query.finish();
+
+    if (!query.exec("DELETE FROM snippets WHERE deleted_at IS NOT NULL")) {
+        if (errorMessage) *errorMessage = query.lastError().text();
+        return false;
+    }
+    query.exec("DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM snippet_tags)");
+    for (int id : ids) unindexSnippet(id);
+    return true;
+}
+
+int Database::trashCount()
+{
+    QSqlQuery query(m_db);
+    return query.exec("SELECT COUNT(*) FROM snippets WHERE deleted_at IS NOT NULL") && query.next()
+               ? query.value(0).toInt() : 0;
+}
+
 bool Database::deleteSnippet(int id, QString* errorMessage)
 {
     QSqlQuery query(m_db);

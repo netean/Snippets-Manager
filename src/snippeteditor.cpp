@@ -349,7 +349,7 @@ void SnippetEditor::setContentEditable(bool editable)
     m_contentEdit->setTextInteractionFlags(editable ? Qt::TextEditorInteraction
                                                     : Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
     m_contentEdit->viewport()->setCursor(editable ? Qt::IBeamCursor : Qt::PointingHandCursor);
-    m_typeCombo->setEnabled(editable && m_snippet.isValid());
+    m_typeCombo->setEnabled(editable && m_snippet.isValid() && !m_locked);
     updateToolbar();
 }
 
@@ -440,6 +440,20 @@ void SnippetEditor::clearFormatting()
     m_contentEdit->setCurrentCharFormat(QTextCharFormat());
     m_contentEdit->setFocus();
     updateFormatActions();
+}
+
+void SnippetEditor::setLocked(bool locked)
+{
+    m_locked = locked;
+    bool enabled = m_snippet.isValid() && !locked;
+    m_titleEdit->setReadOnly(locked);
+    m_tagEdit->setReadOnly(locked);
+    m_titleEdit->setEnabled(m_snippet.isValid());
+    m_tagEdit->setEnabled(m_snippet.isValid());
+    if (locked) {
+        setContentEditable(false);
+    }
+    m_typeCombo->setEnabled(enabled && isContentEditable());
 }
 
 void SnippetEditor::setKnownTags(const QStringList &tags)

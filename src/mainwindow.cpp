@@ -31,7 +31,7 @@ static const char *GeometryKey = "window/geometry";
 static const char *SplitterKey = "window/splitter";
 
 // What each entry in the tag filter shows
-enum TagFilterKind { AllSnippets, Untagged, OneTag };
+enum TagFilterKind { AllSnippets, Untagged, OneTag, Trash };
 static const int TagFilterKindRole = Qt::UserRole;
 static const int TagFilterNameRole = Qt::UserRole + 1;
 
@@ -65,6 +65,7 @@ MainWindow::MainWindow(QWidget *parent)
     connect(m_addButton, &QPushButton::clicked, m_newAction, &QAction::trigger);
     connect(m_editButton, &QPushButton::clicked, m_editAction, &QAction::trigger);
     connect(m_deleteButton, &QPushButton::clicked, m_deleteAction, &QAction::trigger);
+    connect(m_restoreButton, &QPushButton::clicked, m_restoreAction, &QAction::trigger);
     connect(m_saveButton, &QPushButton::clicked, m_saveAction, &QAction::trigger);
     connect(m_copyButton, &QPushButton::clicked, m_copyAction, &QAction::trigger);
     connect(m_editor, &SnippetEditor::changed, this, &MainWindow::onEditorChanged);
@@ -141,8 +142,11 @@ void MainWindow::setupUI()
     m_editButton = new QPushButton("Edit");
     m_deleteButton = new QPushButton("Delete");
     m_deleteButton->setObjectName("deleteButton");
+    m_restoreButton = new QPushButton("Restore");
+    m_restoreButton->setObjectName("restoreButton");
     leftButtonLayout->addWidget(m_addButton);
     leftButtonLayout->addWidget(m_editButton);
+    leftButtonLayout->addWidget(m_restoreButton);
     leftButtonLayout->addWidget(m_deleteButton);
     leftLayout->addLayout(leftButtonLayout);
 
@@ -200,6 +204,18 @@ void MainWindow::setupActions()
     m_snippetList->addAction(m_deleteAction);
     connect(m_deleteAction, &QAction::triggered, this, &MainWindow::onDeleteSnippet);
 
+    m_restoreAction = new QAction("&Restore", this);
+    m_restoreAction->setToolTip("Move the snippet out of the trash");
+    connect(m_restoreAction, &QAction::triggered, this, &MainWindow::onRestoreSnippet);
+
+    // Only fires when the focus isn't in a text field, which has its own undo
+    m_undoDeleteAction = new QAction("&Undo Delete", this);
+    m_undoDeleteAction->setShortcut(QKeySequence::Undo);
+    connect(m_undoDeleteAction, &QAction::triggered, this, &MainWindow::onUndoDelete);
+
+    m_emptyTrashAction = new QAction("Empty &Trash...", this);
+    connect(m_emptyTrashAction, &QAction::triggered, this, &MainWindow::onEmptyTrash);
+
     m_detailsAction = new QAction("Snippet &Details...", this);
     m_detailsAction->setShortcut(QKeySequence("Alt+Return"));
     connect(m_detailsAction, &QAction::triggered, this, &MainWindow::onShowDetails);
@@ -210,10 +226,18 @@ void MainWindow::setupActions()
         if (!m_snippetList->indexAt(pos).isValid() || currentId() == -1) return;
         QMenu menu(this);
         menu.addAction(m_copyAction);
-        menu.addAction(m_editAction);
-        menu.addAction(m_detailsAction);
-        menu.addSeparator();
-        menu.addAction(m_deleteAction);
+        if (inTrashView()) {
+            menu.addAction(m_restoreAction);
+            menu.addAction(m_detailsAction);
+            menu.addSeparator();
+            menu.addAction(m_deleteAction);
+            menu.addAction(m_emptyTrashAction);
+        } else {
+            menu.addAction(m_editAction);
+            menu.addAction(m_detailsAction);
+            menu.addSeparator();
+            menu.addAction(m_deleteAction);
+        }
         menu.exec(m_snippetList->viewport()->mapToGlobal(pos));
     });
 
@@ -240,6 +264,8 @@ void MainWindow::setupMenus()
     connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
 
     QMenu *editMenu = menuBar()->addMenu("&Edit");
+    editMenu->addAction(m_undoDeleteAction);
+    editMenu->addSeparator();
     editMenu->addAction(m_newAction);
     editMenu->addAction(m_editAction);
     editMenu->addAction(m_saveAction);
@@ -247,6 +273,8 @@ void MainWindow::setupMenus()
     editMenu->addAction(m_copyAction);
     editMenu->addAction(m_detailsAction);
     editMenu->addAction(m_deleteAction);
+    editMenu->addAction(m_restoreAction);
+    editMenu->addAction(m_emptyTrashAction);
     editMenu->addSeparator();
     editMenu->addAction(m_findAction);
 
@@ -369,6 +397,8 @@ void MainWindow::updateModeLabel()
 {
     if (currentId() == -1) {
         m_modeLabel->setText("Select a snippet to view");
+    } else if (inTrashView()) {
+        m_modeLabel->setText("In the trash - Restore it to make changes");
     } else if (m_editor->isContentEditable()) {
         m_modeLabel->setText("Editing snippet - Make changes and click 'Save'");
     } else if (copyOnSelect()) {
@@ -381,6 +411,7 @@ void MainWindow::updateModeLabel()
 void MainWindow::loadSnippet(int id)
 {
     m_editor->setSnippet(id != -1 ? Database::instance().snippet(id) : Snippet());
+    m_editor->setLocked(inTrashView());
     updateModeLabel();
     updateButtonStates();
 }
@@ -424,6 +455,10 @@ void MainWindow::refreshTags()
         m_tagFilterCombo->addItem(QString("%1 (%2)").arg(count.first).arg(count.second), OneTag);
         m_tagFilterCombo->setItemData(m_tagFilterCombo->count() - 1, count.first, TagFilterNameRole);
     }
+    m_tagFilterCombo->insertSeparator(m_tagFilterCombo->count());
+    int trashed = Database::instance().trashCount();
+    m_tagFilterCombo->addItem(QIcon::fromTheme("user-trash"), trashed ? QString("Trash (%1)").arg(trashed) : QString("Trash"));
+    m_tagFilterCombo->setItemData(m_tagFilterCombo->count() - 1, Trash, TagFilterKindRole);
 
     int index = 0;
     for (int i = 0; i < m_tagFilterCombo->count(); ++i) {
@@ -441,13 +476,30 @@ void MainWindow::refreshTags()
     }
 }
 
+bool MainWindow::inTrashView() const
+{
+    return m_model && m_model->showsTrash();
+}
+
 void MainWindow::onTagFilterChanged()
 {
     saveCurrentSnippet();
     int kind = m_tagFilterCombo->currentData(TagFilterKindRole).toInt();
+    bool trash = kind == Trash;
+    bool wasTrash = inTrashView();
     m_model->setTagFilter(kind == OneTag ? m_tagFilterCombo->currentData(TagFilterNameRole).toString() : QString(),
                           kind == Untagged);
-    selectSnippet(currentId());
+    m_model->setShowTrash(trash);
+    if (trash != wasTrash) {
+        // The snippet shown belongs to the other view
+        selectSnippet(-1);
+        loadSnippet(-1);
+    } else {
+        selectSnippet(currentId());
+    }
+    m_deleteAction->setText(trash ? "&Delete Forever..." : "&Delete");
+    m_deleteButton->setText(trash ? "Delete Forever" : "Delete");
+    updateButtonStates();
 }
 
 void MainWindow::onSelectionChanged(const QModelIndex &current)
@@ -504,6 +556,11 @@ void MainWindow::onAddSnippet()
 {
     if (!ensureSaved()) return;
 
+    // New snippets go in the normal list, not the trash
+    if (inTrashView()) {
+        m_tagFilterCombo->setCurrentIndex(0);
+    }
+
     // Clear any search so the new snippet is visible in the list
     if (!m_searchEdit->text().isEmpty()) {
         m_searchTimer->stop();
@@ -553,24 +610,109 @@ void MainWindow::onSaveSnippet()
 
 void MainWindow::onDeleteSnippet()
 {
-    if (currentId() == -1) return;
-
+    int id = currentId();
+    if (id == -1) return;
     QString title = m_editor->snippet().title;
-    if (!MessageBox::question(this, "Delete Snippet",
-                              QString("Are you sure you want to delete '%1'?").arg(title))) {
-        return;
+    QString error;
+
+    if (inTrashView()) {
+        if (!MessageBox::question(this, "Delete Forever",
+                                  QString("Permanently delete '%1'? This can't be undone.").arg(title))) {
+            return;
+        }
+        if (!Database::instance().deleteSnippet(id, &error)) {
+            MessageBox::warning(this, "Delete Forever", "The snippet could not be deleted.\n\n" + error);
+            return;
+        }
+        m_recentlyTrashed.removeAll(id);
+        statusBar()->showMessage(QString("'%1' was deleted").arg(title), 4000);
+    } else {
+        // Keep any pending edits with the snippet in the trash
+        if (!ensureSaved()) return;
+        if (!Database::instance().moveToTrash(id, &error)) {
+            MessageBox::warning(this, "Delete Snippet", "The snippet could not be moved to the trash.\n\n" + error);
+            return;
+        }
+        m_recentlyTrashed.append(id);
+        statusBar()->showMessage(QString("Moved '%1' to the trash - Press %2 to undo")
+                                     .arg(title, m_undoDeleteAction->shortcut().toString(QKeySequence::NativeText)),
+                                 8000);
     }
 
+    m_editor->setModified(false);
+    int row = m_model->rowForId(id);
+    m_model->refresh();
+    refreshTags();
+    // Select the next snippet, so several can be deleted in a row
+    int next = qMin(row, m_model->rowCount() - 1);
+    int nextId = next >= 0 ? m_model->data(m_model->index(next, 0), SnippetModel::IdRole).toInt() : -1;
+    selectSnippet(nextId);
+    loadSnippet(nextId);
+}
+
+void MainWindow::onUndoDelete()
+{
+    // The restored snippet replaces the one being shown
+    if (!ensureSaved()) return;
+    while (!m_recentlyTrashed.isEmpty()) {
+        int id = m_recentlyTrashed.takeLast();
+        if (Database::instance().restoreFromTrash(id)) {
+            m_model->refresh();
+            refreshTags();
+            if (!inTrashView()) {
+                selectSnippet(id);
+                loadSnippet(id);
+            } else {
+                selectSnippet(-1);
+                loadSnippet(-1);
+            }
+            statusBar()->showMessage(QString("Restored '%1'").arg(Database::instance().snippet(id).title), 4000);
+            return;
+        }
+        // Already restored or deleted for good; try the one before
+    }
+    statusBar()->showMessage("Nothing to undo", 2000);
+}
+
+void MainWindow::onRestoreSnippet()
+{
+    int id = currentId();
+    if (id == -1 || !inTrashView()) return;
     QString error;
-    if (!Database::instance().deleteSnippet(currentId(), &error)) {
-        MessageBox::warning(this, "Delete Snippet", "The snippet could not be deleted.\n\n" + error);
+    if (!Database::instance().restoreFromTrash(id, &error)) {
+        MessageBox::warning(this, "Restore", "The snippet could not be restored.\n\n" + error);
         return;
     }
-    m_editor->setModified(false);
+    m_recentlyTrashed.removeAll(id);
+    QString title = m_editor->snippet().title;
     m_model->refresh();
     refreshTags();
     selectSnippet(-1);
     loadSnippet(-1);
+    statusBar()->showMessage(QString("Restored '%1'").arg(title), 4000);
+}
+
+void MainWindow::onEmptyTrash()
+{
+    int count = Database::instance().trashCount();
+    if (count == 0) return;
+    if (!MessageBox::question(this, "Empty Trash",
+                              QString("Permanently delete the %1 snippet(s) in the trash? This can't be undone.").arg(count))) {
+        return;
+    }
+    QString error;
+    if (!Database::instance().emptyTrash(&error)) {
+        MessageBox::warning(this, "Empty Trash", "The trash could not be emptied.\n\n" + error);
+        return;
+    }
+    m_recentlyTrashed.clear();
+    m_model->refresh();
+    refreshTags();
+    if (inTrashView()) {
+        selectSnippet(-1);
+        loadSnippet(-1);
+    }
+    statusBar()->showMessage("The trash was emptied", 4000);
 }
 
 void MainWindow::onCopySnippet()
@@ -597,6 +739,7 @@ void MainWindow::onShowSettings()
 void MainWindow::onDatabaseChanged()
 {
     m_editor->setModified(false);
+    m_recentlyTrashed.clear();
     m_model->refresh();
     refreshTags();
     selectSnippet(-1);
@@ -609,7 +752,13 @@ void MainWindow::updateButtonStates()
     bool hasSelection = currentId() != -1;
     bool hasContent = !m_editor->plainText().isEmpty();
 
-    m_editAction->setEnabled(hasSelection && !m_editor->isContentEditable());
+    bool trash = inTrashView();
+    m_editAction->setEnabled(hasSelection && !m_editor->isContentEditable() && !trash);
+    m_restoreAction->setEnabled(hasSelection && trash);
+    m_restoreButton->setVisible(trash);
+    m_restoreButton->setEnabled(m_restoreAction->isEnabled());
+    m_emptyTrashAction->setEnabled(Database::instance().trashCount() > 0);
+    m_editButton->setVisible(!trash);
     m_deleteAction->setEnabled(hasSelection);
     m_detailsAction->setEnabled(hasSelection);
     m_saveAction->setEnabled(m_editor->isModified() && hasSelection);
