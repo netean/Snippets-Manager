@@ -13,6 +13,7 @@
 #include <QMenu>
 #include <QAction>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QSettings>
 #include <QIcon>
 #include <QDebug>
@@ -21,6 +22,8 @@
 #include <QFile>
 
 static const char *SortOrderKey = "view/sortOrder";
+static const char *GeometryKey = "window/geometry";
+static const char *SplitterKey = "window/splitter";
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -29,6 +32,7 @@ MainWindow::MainWindow(QWidget *parent)
     , m_updatingSelection(false)
 {
     setupUI();
+    setupActions();
     setupMenus();
     
     m_model = new SnippetModel(this);
@@ -50,11 +54,11 @@ MainWindow::MainWindow(QWidget *parent)
             this, &MainWindow::onSelectionChanged);
     connect(m_searchEdit, &QLineEdit::textChanged, this, [this]() { m_searchTimer->start(); });
     connect(m_sortCombo, &QComboBox::currentIndexChanged, this, &MainWindow::onSortOrderChanged);
-    connect(m_addButton, &QPushButton::clicked, this, &MainWindow::onAddSnippet);
-    connect(m_editButton, &QPushButton::clicked, this, &MainWindow::onEditSnippet);
-    connect(m_deleteButton, &QPushButton::clicked, this, &MainWindow::onDeleteSnippet);
-    connect(m_saveButton, &QPushButton::clicked, this, &MainWindow::onSaveSnippet);
-    connect(m_copyButton, &QPushButton::clicked, this, &MainWindow::onCopySnippet);
+    connect(m_addButton, &QPushButton::clicked, m_newAction, &QAction::trigger);
+    connect(m_editButton, &QPushButton::clicked, m_editAction, &QAction::trigger);
+    connect(m_deleteButton, &QPushButton::clicked, m_deleteAction, &QAction::trigger);
+    connect(m_saveButton, &QPushButton::clicked, m_saveAction, &QAction::trigger);
+    connect(m_copyButton, &QPushButton::clicked, m_copyAction, &QAction::trigger);
     connect(m_titleEdit, &QLineEdit::textChanged, this, &MainWindow::onTitleChanged);
     connect(m_titleEdit, &QLineEdit::returnPressed, this, &MainWindow::ensureSaved);
     connect(m_contentEdit, &QTextEdit::textChanged, this, &MainWindow::onContentChanged);
@@ -70,7 +74,12 @@ MainWindow::MainWindow(QWidget *parent)
     versionLabel->setStyleSheet("color: #666; padding: 0 4px;");
     statusBar()->addPermanentWidget(versionLabel);
     
-    resize(800, 600);
+    // Restore the window size and the split between the list and the snippet
+    QSettings settings;
+    if (!restoreGeometry(settings.value(GeometryKey).toByteArray())) {
+        resize(900, 600);
+    }
+    m_splitter->restoreState(settings.value(SplitterKey).toByteArray());
 }
 
 MainWindow::~MainWindow()
@@ -90,7 +99,9 @@ void MainWindow::setupUI()
     QVBoxLayout *leftLayout = new QVBoxLayout(m_leftPanel);
     
     m_searchEdit = new QLineEdit;
-    m_searchEdit->setPlaceholderText("Search snippets...");
+    m_searchEdit->setPlaceholderText("Search snippets... (Ctrl+F)");
+    m_searchEdit->setClearButtonEnabled(true);
+    m_searchEdit->installEventFilter(this);
     leftLayout->addWidget(m_searchEdit);
 
     QHBoxLayout *sortLayout = new QHBoxLayout;
@@ -104,6 +115,7 @@ void MainWindow::setupUI()
     leftLayout->addLayout(sortLayout);
     
     m_snippetList = new QListView;
+    m_snippetList->setUniformItemSizes(true);
     leftLayout->addWidget(m_snippetList);
     
     QHBoxLayout *leftButtonLayout = new QHBoxLayout;
@@ -142,10 +154,44 @@ void MainWindow::setupUI()
     
     m_splitter->addWidget(m_leftPanel);
     m_splitter->addWidget(m_rightPanel);
-    m_splitter->setSizes({300, 500});
+    m_splitter->setChildrenCollapsible(false);
+    m_splitter->setSizes({300, 600});
     
     QHBoxLayout *mainLayout = new QHBoxLayout(m_centralWidget);
     mainLayout->addWidget(m_splitter);
+}
+
+void MainWindow::setupActions()
+{
+    m_newAction = new QAction("&New Snippet", this);
+    m_newAction->setShortcut(QKeySequence::New);
+    connect(m_newAction, &QAction::triggered, this, &MainWindow::onAddSnippet);
+
+    m_saveAction = new QAction("&Save", this);
+    m_saveAction->setShortcut(QKeySequence::Save);
+    connect(m_saveAction, &QAction::triggered, this, &MainWindow::onSaveSnippet);
+
+    m_editAction = new QAction("&Edit Content", this);
+    m_editAction->setShortcut(QKeySequence("Ctrl+E"));
+    connect(m_editAction, &QAction::triggered, this, &MainWindow::onEditSnippet);
+
+    m_copyAction = new QAction("&Copy Snippet", this);
+    m_copyAction->setShortcut(QKeySequence("Ctrl+Shift+C"));
+    connect(m_copyAction, &QAction::triggered, this, &MainWindow::onCopySnippet);
+
+    // Delete only applies in the list, so it doesn't interfere with typing
+    m_deleteAction = new QAction("&Delete", this);
+    m_deleteAction->setShortcut(QKeySequence::Delete);
+    m_deleteAction->setShortcutContext(Qt::WidgetShortcut);
+    m_snippetList->addAction(m_deleteAction);
+    connect(m_deleteAction, &QAction::triggered, this, &MainWindow::onDeleteSnippet);
+
+    m_findAction = new QAction("&Find", this);
+    m_findAction->setShortcut(QKeySequence::Find);
+    connect(m_findAction, &QAction::triggered, this, [this]() {
+        m_searchEdit->setFocus();
+        m_searchEdit->selectAll();
+    });
 }
 
 void MainWindow::setupMenus()
@@ -161,6 +207,16 @@ void MainWindow::setupMenus()
     QAction *quitAction = fileMenu->addAction("&Quit");
     quitAction->setShortcut(QKeySequence::Quit);
     connect(quitAction, &QAction::triggered, this, &QMainWindow::close);
+
+    QMenu *editMenu = menuBar()->addMenu("&Edit");
+    editMenu->addAction(m_newAction);
+    editMenu->addAction(m_editAction);
+    editMenu->addAction(m_saveAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_copyAction);
+    editMenu->addAction(m_deleteAction);
+    editMenu->addSeparator();
+    editMenu->addAction(m_findAction);
 
     QMenu *helpMenu = menuBar()->addMenu("&Help");
     QAction *aboutAction = helpMenu->addAction("&About Snippet Manager");
@@ -181,6 +237,22 @@ void MainWindow::onAbout()
 
 bool MainWindow::eventFilter(QObject *watched, QEvent *event)
 {
+    // In the search box, Escape clears the search and Down moves into the list
+    if (watched == m_searchEdit && event->type() == QEvent::KeyPress) {
+        auto *keyEvent = static_cast<QKeyEvent *>(event);
+        if (keyEvent->key() == Qt::Key_Escape && !m_searchEdit->text().isEmpty()) {
+            m_searchEdit->clear();
+            return true;
+        }
+        if (keyEvent->key() == Qt::Key_Down && m_model->rowCount() > 0) {
+            m_snippetList->setFocus();
+            if (!m_snippetList->currentIndex().isValid()) {
+                m_snippetList->setCurrentIndex(m_model->index(0, 0));
+            }
+            return true;
+        }
+    }
+
     // While viewing (not editing) a snippet, a click anywhere in the content
     // copies it. If the user dragged to select part of the text, only the
     // selection is copied. Clicks while editing are left alone so the
@@ -214,6 +286,10 @@ void MainWindow::closeEvent(QCloseEvent *event)
         }
         m_isModified = false;
     }
+
+    QSettings settings;
+    settings.setValue(GeometryKey, saveGeometry());
+    settings.setValue(SplitterKey, m_splitter->saveState());
     event->accept();
 }
 
@@ -442,10 +518,14 @@ void MainWindow::updateButtonStates()
     bool hasSelection = m_currentSnippetId != -1;
     bool hasContent = !m_contentEdit->toPlainText().isEmpty();
     
-    m_editButton->setEnabled(hasSelection && !isContentEditable());
-    m_deleteButton->setEnabled(hasSelection);
-    m_saveButton->setEnabled(m_isModified && hasSelection);
-    m_copyButton->setEnabled(hasContent);
+    m_editAction->setEnabled(hasSelection && !isContentEditable());
+    m_deleteAction->setEnabled(hasSelection);
+    m_saveAction->setEnabled(m_isModified && hasSelection);
+    m_copyAction->setEnabled(hasContent);
+    m_editButton->setEnabled(m_editAction->isEnabled());
+    m_deleteButton->setEnabled(m_deleteAction->isEnabled());
+    m_saveButton->setEnabled(m_saveAction->isEnabled());
+    m_copyButton->setEnabled(m_copyAction->isEnabled());
 }
 
 bool MainWindow::saveCurrentSnippet(QString *errorMessage)

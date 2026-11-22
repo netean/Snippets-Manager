@@ -43,6 +43,7 @@ private slots:
 
 private:
     void setupUI();
+    void setupActions();
     void setupMenus();
     void updateButtonStates();
     // Saves pending edits; returns true if there was nothing to save or the save worked
@@ -76,6 +77,13 @@ private:
     QPushButton *m_saveButton;
     QPushButton *m_copyButton;
     
+    QAction *m_newAction;
+    QAction *m_saveAction;
+    QAction *m_editAction;
+    QAction *m_copyAction;
+    QAction *m_deleteAction;
+    QAction *m_findAction;
+
     SnippetModel *m_model;
     int m_currentSnippetId;
     Snippet m_current;
