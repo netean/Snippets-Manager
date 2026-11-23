@@ -35,7 +35,22 @@ Used and tested on Fedora and CachyOs
 
 ## Installing (Linux)
 
-The easiest way is the install script, which builds the app and adds it to your application menu:
+### Packages
+
+Each [release](../../releases/latest) has ready-made packages:
+
+| Distro | Install |
+|---|---|
+| **Arch, CachyOS, EndeavourOS, Manjaro** | From the AUR: `paru -S snippets-manager` (or `yay -S snippets-manager`). Or download the `.pkg.tar.zst` and run `sudo pacman -U snippets-manager-*.pkg.tar.zst` |
+| **Fedora** | Download the `.rpm` and run `sudo dnf install ./snippets-manager-*.rpm` |
+| **Ubuntu 24.04+, Debian 13** | Download the `.deb` and run `sudo apt install ./snippets-manager_*.deb` |
+| **Any other distro** | Download the AppImage (see below) |
+
+Packages install Snippet Manager for all users and add it to your application menu; your package manager removes it again. See [packaging/](packaging/) for how they're built.
+
+### Install script
+
+The install script builds the app from source and adds it to your application menu:
 
 ```bash
 ./install.sh --install-deps   # first time: also installs the build dependencies (apt, dnf, pacman or zypper)
