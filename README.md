@@ -162,11 +162,25 @@ When 2.0 first opens a 1.x database, it upgrades it and saves a copy of the orig
 
 ## Screenshots
 
-<img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/4b06dcdc-bbd8-41fc-a6dc-19217ebd7ccd" />
-<img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/cd1bb4b1-20dc-45ce-a06e-62f6ccc0c3dc" />
-<img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/d165547e-aad1-4add-91f3-fe5180ad5d4c" />
+**Folders, tags and rich text.** Snippets live in folders (drag them in, or right-click for options) and can have tags. Rich text snippets get a formatting toolbar: headings, bold, italic, underline, links, lists and checklists.
 
+<img src="docs/screenshots/editing-rich-text.png" width="820" alt="The main window: a folder tree on the left, and a rich text snippet with a heading, formatting, lists and a checklist being edited on the right">
 
+**Folder options.** Right-click a folder to add a snippet or subfolder to it, rename it, move it or delete it.
+
+<img src="docs/screenshots/folders-menu.png" width="820" alt="The right-click menu on a folder: New Snippet Here, New Subfolder, Rename Folder, Move to Folder and Delete Folder">
+
+**Code with syntax highlighting, in dark mode.** Code snippets are highlighted by language, in colours that follow your light or dark theme.
+
+<img src="docs/screenshots/code-dark.png" width="820" alt="A Bash script with syntax highlighting, in a dark theme">
+
+**Quick search.** Open it from the tray, a global keyboard shortcut or `snippetmanager --popup`, type a few letters and press Enter to copy.
+
+<img src="docs/screenshots/quick-search.png" width="460" alt="The quick search popup, showing snippets that match 'shell' with a preview of each">
+
+**Settings.** Clipboard options, including placeholders like `{{date}}` that are filled in when a snippet is copied.
+
+<img src="docs/screenshots/settings-clipboard.png" width="520" alt="The Clipboard tab of the settings, with the placeholders explained">
 
 ## Licence
 
