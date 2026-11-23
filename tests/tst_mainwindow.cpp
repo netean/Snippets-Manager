@@ -287,9 +287,7 @@ private slots:
 
     void highlightsCodeWhenEnabled()
     {
-#ifndef HAVE_SYNTAX_HIGHLIGHTING
-        QSKIP("Built without KSyntaxHighlighting");
-#else
+        // KSyntaxHighlighting or the built-in highlighter, depending on the build
         Snippet code;
         code.title = "Code";
         code.language = "Python";
@@ -315,7 +313,6 @@ private slots:
         reload();
         selectRow(0);
         QVERIFY(m_content->document()->firstBlock().layout()->formats().isEmpty());
-#endif
     }
 
     void copyFillsInPlaceholders()

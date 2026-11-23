@@ -1,11 +1,11 @@
 # Snippet Manager
 
-**Current release: 1.3** — see [CHANGELOG.md](CHANGELOG.md) for what's new. `main` is 2.0, in development.
+**Current release: 2.0** — see [CHANGELOG.md](CHANGELOG.md) for what's new.
 
 ## Versions
 
-- **1.x (stable)**: the simple version. It lives on the [`v1` branch](../../tree/v1) and gets bug and security fixes only. Download it from [Releases](../../releases).
-- **2.0 (in development)**: what this README describes, on `main`. 2.0 upgrades 1.x databases when it first opens them (keeping a backup copy), so you can move up without losing your snippets. Until 2.0 is released, use a release or the `v1` branch if you just want a working app.
+- **2.0 (current)**: what this README describes, on `main`. 2.0 upgrades 1.x databases when it first opens them (keeping a backup copy), so you can move up without losing your snippets. Download it from [Releases](../../releases).
+- **1.x**: the simple version, still available as release 1.3. It lives on the [`v1` branch](../../tree/v1) and gets bug and security fixes only.
 
 A very simple, very basic, KDE desktop application for storing and managing text snippets, code snippets, and short phrases with full Unicode support.
 
@@ -44,7 +44,22 @@ Used and tested on Fedora and CachyOs
 
 ## Installing (Linux)
 
-The easiest way is the install script, which builds the app and adds it to your application menu:
+### Packages
+
+Each [release](../../releases/latest) has ready-made packages:
+
+| Distro | Install |
+|---|---|
+| **Arch, CachyOS, EndeavourOS, Manjaro** | From the AUR: `paru -S snippets-manager` (or `yay -S snippets-manager`). Or download the `.pkg.tar.zst` and run `sudo pacman -U snippets-manager-*.pkg.tar.zst` |
+| **Fedora** | Download the `.rpm` and run `sudo dnf install ./snippets-manager-*.rpm` |
+| **Ubuntu 24.04+, Debian 13** | Download the `.deb` and run `sudo apt install ./snippets-manager_*.deb` |
+| **Any other distro** | Download the AppImage (see below) |
+
+Packages install Snippet Manager for all users and add it to your application menu; your package manager removes it again. See [packaging/](packaging/) for how they're built.
+
+### Install script
+
+The install script builds the app from source and adds it to your application menu:
 
 ```bash
 ./install.sh --install-deps   # first time: also installs the build dependencies (apt, dnf, pacman or zypper)
@@ -65,7 +80,7 @@ chmod +x SnippetManager-2.0-x86_64.AppImage
 ./SnippetManager-2.0-x86_64.AppImage
 ```
 
-It builds inside an Ubuntu 24.04 container (it needs podman or docker), so the AppImage runs on Ubuntu 24.04 and newer, Debian 13, Fedora 40+ and current rolling distros, whatever you build it on. `./package-appimage.sh --native` builds with your own Qt instead, but the result then only runs on distros at least as new as yours. The AppImage doesn't include syntax highlighting (Ubuntu 24.04 doesn't have the library); builds from source do.
+It builds inside an Ubuntu 24.04 container (it needs podman or docker), so the AppImage runs on Ubuntu 24.04 and newer, Debian 13, Fedora 40+ and current rolling distros, whatever you build it on. `./package-appimage.sh --native` builds with your own Qt instead, but the result then only runs on distros at least as new as yours. The AppImage uses the built-in syntax highlighting (see [Syntax highlighting](#syntax-highlighting)).
 
 Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the distro); without it, run it with `--appimage-extract-and-run`.
 
@@ -81,7 +96,7 @@ Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the
 - CMake 3.19+
 - Qt 6.4+ (Core, Gui, Widgets, Sql with the SQLite driver, Network, and DBus on Linux)
 - C++17 compiler
-- Optional: KDE's KSyntaxHighlighting (KF6) for syntax highlighting
+- Optional: KDE's KSyntaxHighlighting (KF6), for syntax highlighting of over 300 languages instead of the built-in 32
 
 ### Ubuntu/Debian
 ```bash
@@ -130,6 +145,15 @@ Or just download the binary release from the releases page.
     - **Quick Access**: the tray icon, starting at login, and the global shortcut
     - **Database**: where the database is stored. Move it, open a different database, or create a new one
 
+### Syntax highlighting
+
+Code snippets are highlighted on every system, in one of two ways:
+
+- **KDE's KSyntaxHighlighting**, when it's installed where Snippet Manager is built (for example with `./install.sh --install-deps` on Fedora, Arch, openSUSE, Debian 13 or Ubuntu 25.04 and newer). It knows over 300 languages and is very accurate.
+- **The built-in highlighter** otherwise. It covers the 32 languages in the Type list (Bash, C, C++, C#, CSS, Go, HTML, Java, JavaScript, JSON, Python, Rust, SQL, TypeScript, YAML and others), colouring keywords, types, strings, comments, numbers, variables and tags, in colours that suit light and dark themes.
+
+Why two? KSyntaxHighlighting is part of KDE Frameworks 6, which isn't available everywhere Snippet Manager runs. Ubuntu 24.04, which the AppImage is built on so that it runs on as many distros as possible, doesn't have it. Nor do standard Qt installs on Windows and macOS, where it would have to be built from source. Rather than leave those versions without highlighting, Snippet Manager has a small highlighter of its own that needs nothing beyond Qt. It's used whenever KSyntaxHighlighting isn't there, so every version highlights code. Settings > Editor shows which one your copy uses, and can turn highlighting off.
+
 ### The global shortcut
 
 Turn on "Open the quick search with a keyboard shortcut" in Settings > Quick Access. Your desktop asks you to confirm the keys (Meta+Alt+V is suggested), and you can change them later in the desktop's shortcut settings. This uses the desktop's global shortcuts portal, which KDE Plasma 6, GNOME 48+ and Hyprland have. The app needs to be installed with `install.sh` (or have its menu entry added) for the desktop to recognise it.
@@ -150,8 +174,26 @@ When 2.0 first opens a 1.x database, it upgrades it and saves a copy of the orig
 
 ## Screenshots
 
-<img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/4b06dcdc-bbd8-41fc-a6dc-19217ebd7ccd" />
-<img width="1024" height="700" alt="image" src="https://github.com/user-attachments/assets/cd1bb4b1-20dc-45ce-a06e-62f6ccc0c3dc" />
-<img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/d165547e-aad1-4add-91f3-fe5180ad5d4c" />
+**Folders, tags and rich text.** Snippets live in folders (drag them in, or right-click for options) and can have tags. Rich text snippets get a formatting toolbar: headings, bold, italic, underline, links, lists and checklists.
 
+<img src="docs/screenshots/editing-rich-text.png" width="820" alt="The main window: a folder tree on the left, and a rich text snippet with a heading, formatting, lists and a checklist being edited on the right">
 
+**Folder options.** Right-click a folder to add a snippet or subfolder to it, rename it, move it or delete it.
+
+<img src="docs/screenshots/folders-menu.png" width="820" alt="The right-click menu on a folder: New Snippet Here, New Subfolder, Rename Folder, Move to Folder and Delete Folder">
+
+**Code with syntax highlighting, in dark mode.** Code snippets are highlighted by language, in colours that follow your light or dark theme.
+
+<img src="docs/screenshots/code-dark.png" width="820" alt="A Bash script with syntax highlighting, in a dark theme">
+
+**Quick search.** Open it from the tray, a global keyboard shortcut or `snippetmanager --popup`, type a few letters and press Enter to copy.
+
+<img src="docs/screenshots/quick-search.png" width="460" alt="The quick search popup, showing snippets that match 'shell' with a preview of each">
+
+**Settings.** Clipboard options, including placeholders like `{{date}}` that are filled in when a snippet is copied.
+
+<img src="docs/screenshots/settings-clipboard.png" width="520" alt="The Clipboard tab of the settings, with the placeholders explained">
+
+## Licence
+
+Snippet Manager is free software, released under the [GNU General Public License, version 3](LICENSE) or (at your option) any later version. You can use, study, share and change it; if you distribute a changed version, it must be under the same licence, with its source code available.

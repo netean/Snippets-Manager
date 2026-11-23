@@ -40,7 +40,7 @@ jobs:
       - name: Build
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-Wall -Wextra" | tee configure.log
-          grep -q "Syntax highlighting: enabled" configure.log
+          grep -q "Syntax highlighting: KF6SyntaxHighlighting" configure.log
           cmake --build build --parallel
       - name: Test
         run: ctest --test-dir build --output-on-failure

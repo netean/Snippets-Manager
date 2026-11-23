@@ -53,14 +53,13 @@ SettingsDialog::SettingsDialog(QWidget *parent)
     highlightingCheck->setToolTip("Colours snippets whose type is a programming language");
     highlightingCheck->setChecked(settings.value(SettingsKeys::SyntaxHighlighting, true).toBool());
     editorLayout->addWidget(highlightingCheck);
-    if (!Languages::highlightingAvailable()) {
-        highlightingCheck->setEnabled(false);
-        QLabel *unavailable = new QLabel("This copy of Snippet Manager was built without syntax highlighting "
-                                         "(it needs KDE's KSyntaxHighlighting library).");
-        unavailable->setWordWrap(true);
-        unavailable->setContentsMargins(20, 0, 0, 0);
-        editorLayout->addWidget(unavailable);
-    }
+    QLabel *highlightingHelp = new QLabel(Languages::usesKSyntaxHighlighting()
+        ? "Uses KDE's syntax highlighting, which knows over 300 languages."
+        : "Uses Snippet Manager's built-in highlighting for common languages. Builds made where KDE's "
+          "KSyntaxHighlighting library is installed know over 300 languages.");
+    highlightingHelp->setWordWrap(true);
+    highlightingHelp->setContentsMargins(20, 0, 0, 0);
+    editorLayout->addWidget(highlightingHelp);
     editorLayout->addStretch();
 
     // Clipboard

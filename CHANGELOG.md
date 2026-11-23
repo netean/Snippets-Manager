@@ -1,15 +1,15 @@
 # Changelog
 
-## 2.0 (in development)
+## 2.0
 
-New features are being built on `main`. Fixes for 1.x go on the `v1` branch.
+Fixes for 1.x continue on the `v1` branch.
 
 ### New
 - **Folders**: right-click the list to add folders (they can be nested), then drag snippets into them or use Move to Folder. Deleting a folder moves what's in it up a level; snippets are never deleted with it. Exports and imports keep each snippet's folder.
 - **Tags**: add comma-separated tags to snippets (existing tags are suggested), and filter the list by tag.
 - **Snippet types**: plain text, rich text or a programming language.
 - **Rich text editor**: a formatting toolbar above the content and a Format menu: headings, bold, italic, underline, strikethrough, code, links, bulleted, numbered and checklists, indent/outdent and clear formatting. It appears for plain text snippets too, and turns them into rich text when used. Rich text is stored as Markdown (underline as inline HTML), and copied with its formatting. Settings > Editor can turn it off, making everything plain text.
-- **Syntax highlighting** for code snippets, using KDE's KSyntaxHighlighting when it's installed. Can be turned off.
+- **Syntax highlighting** for code snippets, on every system. Builds made where KDE's KSyntaxHighlighting is installed use it (over 300 languages). Everywhere else, including the AppImage, Windows and macOS, a built-in highlighter covers the 32 languages in the Type list. KSyntaxHighlighting is part of KDE Frameworks 6, which Ubuntu 24.04 (the AppImage's base, chosen so it runs on as many distros as possible) and standard Windows and macOS Qt installs don't have, so without the built-in highlighter those versions would have had no highlighting at all. Can be turned off.
 - **Better search**: results are ranked (title matches first, then tags, then content), and search covers tags.
 - **Trash**: deleting moves a snippet to the trash, Ctrl+Z brings it back, and "Show: Trash" restores snippets or deletes them for good.
 - **Placeholders**: `{{date}}`, `{{time}}`, `{{datetime}}`, `{{clipboard}}` and `{{uuid}}` are filled in when copying.
