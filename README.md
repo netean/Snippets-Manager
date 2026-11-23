@@ -152,3 +152,7 @@ When 2.0 first opens a 1.x database, it upgrades it and saves a copy of the orig
 <img width="820" height="640" alt="image" src="https://github.com/user-attachments/assets/d165547e-aad1-4add-91f3-fe5180ad5d4c" />
 
 
+
+## Licence
+
+Snippet Manager is free software, released under the [GNU General Public License, version 3](LICENSE) or (at your option) any later version. You can use, study, share and change it; if you distribute a changed version, it must be under the same licence, with its source code available.
