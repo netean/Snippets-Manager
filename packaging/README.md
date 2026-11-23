@@ -13,24 +13,58 @@ All three build from the release's source archive on GitHub (the tag), run
 the test suite, and are then installed in a fresh container to check they
 work.
 
-## Building the packages for a release
+## Making a release
 
-1. Tag the release and push the tag.
-2. In `arch/PKGBUILD`, set `pkgver`, reset `pkgrel=1`, and update the first
-   checksum in `sha256sums` for the new source archive:
+Releases are built and published by GitHub Actions (`.github/workflows/release.yml`)
+when a version tag is pushed:
+
+1. Set the version in `CMakeLists.txt`: `project(SnippetManager VERSION 2.1 LANGUAGES CXX)`.
+2. Add a `## 2.1` section at the top of `CHANGELOG.md`. It becomes the release
+   notes, followed by install instructions for each package.
+3. Commit those (through a pull request, as usual), then tag the commit on
+   `main` and push the tag:
    ```bash
-   curl -sL https://github.com/netean/Snippets-Manager/archive/refs/tags/<version>.tar.gz | sha256sum
+   git switch main && git pull
+   git tag -a 2.1 -m "Snippet Manager 2.1"
+   git push origin 2.1
    ```
-3. In `rpm/snippets-manager.spec`, set `Version` and add a `%changelog` entry.
-4. Build everything (needs podman or docker):
-   ```bash
-   packaging/build-packages.sh          # or: packaging/build-packages.sh arch rpm deb
-   ```
-   The packages end up in `dist/`, and `arch/.SRCINFO` is regenerated.
-5. Attach them to the GitHub release:
-   ```bash
-   gh release upload <version> dist/*.pkg.tar.zst dist/*.rpm dist/*.deb
-   ```
+
+The workflow then:
+
+- checks that the tag matches `CMakeLists.txt` and that the changelog has a
+  section for it (it stops, publishing nothing, if not)
+- runs the usual build and tests on Linux, Windows and macOS, and builds the AppImage
+- builds the Arch, Fedora and Debian/Ubuntu packages from the tagged code, each
+  tested and then installed in a fresh container
+- publishes the GitHub release with all of them and a `SHA256SUMS.txt`, marked
+  as the latest release (only for tags on `main`)
+- makes the updated AUR `PKGBUILD` and `.SRCINFO`, attaches them to the release
+  as `snippets-manager-aur-<version>.tar.gz`, and pushes them to the AUR if the
+  `AUR_SSH_PRIVATE_KEY` secret is set (see below)
+
+If anything fails, nothing is published: fix it, delete the tag
+(`git push --delete origin 2.1 && git tag -d 2.1`) and tag again.
+
+Pull requests that change the release process (this folder, the workflows or
+`package-appimage.sh`) run the whole thing as a rehearsal, without publishing.
+You can also rehearse from the Actions tab: *Release* > *Run workflow*.
+
+The `.spec` and `PKGBUILD` here don't need their versions updated by hand: the
+workflow fills in the version and checksums. Updating `packaging/arch/PKGBUILD`
+afterwards (from the release's AUR files) keeps the copy in the repository current.
+
+### Building the packages by hand
+
+To build the packages on your own machine (needs podman or docker):
+
+```bash
+packaging/build-packages.sh                     # the release in packaging/arch/PKGBUILD
+packaging/build-packages.sh arch                # just one kind
+git archive --prefix=Snippets-Manager-2.1/ -o /tmp/src.tar.gz HEAD
+packaging/build-packages.sh --version 2.1 --source /tmp/src.tar.gz   # from local code
+```
+
+The packages end up in `dist/`.
 
 ## Publishing to the AUR
 
@@ -54,15 +88,29 @@ with an SSH key; nobody else can push for you.
    git clone ssh://aur@aur.archlinux.org/snippets-manager.git ~/aur/snippets-manager
    ```
 
-**Each release:**
+**Each release**, by hand (unpack `snippets-manager-aur-<version>.tar.gz` from the release):
 
 ```bash
-cp packaging/arch/PKGBUILD packaging/arch/.SRCINFO ~/aur/snippets-manager/
+tar -xzf snippets-manager-aur-<version>.tar.gz -C ~/aur/snippets-manager/
 cd ~/aur/snippets-manager
 git add PKGBUILD .SRCINFO
 git commit -m "Update to <version>"
 git push
 ```
+
+**Or let the release workflow do it.** Create a separate SSH key just for this,
+add its public half to your AUR account (*My Account* > *SSH Public Key*; the
+AUR accepts several, one per line), and add the private half as a repository
+secret called `AUR_SSH_PRIVATE_KEY` (GitHub: *Settings* > *Secrets and
+variables* > *Actions* > *New repository secret*):
+
+```bash
+ssh-keygen -t ed25519 -N "" -C "snippets-manager release workflow" -f ~/.ssh/aur-release
+cat ~/.ssh/aur-release.pub     # add to the AUR
+gh secret set AUR_SSH_PRIVATE_KEY < ~/.ssh/aur-release   # or paste it on GitHub
+```
+
+The AUR package has to exist first (the first push, above, creates it).
 
 The AUR only accepts the `PKGBUILD`, `.SRCINFO` and small helper files: no
 built packages or source archives. Always regenerate `.SRCINFO` (the build
