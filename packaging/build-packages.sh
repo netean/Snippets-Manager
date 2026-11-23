@@ -6,10 +6,13 @@
 #   - Debian/Ubuntu (.deb), with packaging/deb/build-deb.sh on Ubuntu 24.04
 # Each package is then installed in a fresh container to check it works.
 #
-# The version, source download and checksums come from the PKGBUILD, so for
-# a new release update those (and the .spec's Version/changelog) first.
+# By default the version, source download and checksums come from the
+# PKGBUILD. With --source, the packages are built from a local source archive
+# instead (the release workflow uses this to build from the tagged commit
+# before the release exists).
 #
-# Usage: packaging/build-packages.sh [arch|rpm|deb ...]   (default: all three)
+# Usage: packaging/build-packages.sh [--version X --source archive.tar.gz] [arch|rpm|deb ...]
+#        (default: all three)
 # Output: dist/ in the project folder
 
 set -euo pipefail
@@ -34,7 +37,17 @@ eval "$(source "$PACKAGING/arch/PKGBUILD"; declare -p pkgname pkgver source sha2
 TARBALL_URL="${source[0]#*::}"
 LICENSE_URL="${source[1]#*::}"
 
-targets=("$@")
+LOCAL_SOURCE=""
+targets=()
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --version) pkgver="$2"; shift ;;
+        --source)  LOCAL_SOURCE="$(realpath "$2")"; shift ;;
+        arch|rpm|deb) targets+=("$1") ;;
+        *) die "Unknown option: $1" ;;
+    esac
+    shift
+done
 [[ ${#targets[@]} -gt 0 ]] || targets=(arch rpm deb)
 
 # ---------------------------------------------------------------------------
@@ -50,8 +63,23 @@ fetch() {
     echo "$sha256  $file" | sha256sum --check --status || die "$(basename "$file") doesn't match the PKGBUILD's checksum"
 }
 TARBALL="$WORK/sources/$pkgname-$pkgver.tar.gz"
-fetch "$TARBALL_URL" "$TARBALL" "${sha256sums[0]}"
+if [[ -n "$LOCAL_SOURCE" ]]; then
+    cp "$LOCAL_SOURCE" "$TARBALL"
+else
+    fetch "$TARBALL_URL" "$TARBALL" "${sha256sums[0]}"
+fi
 fetch "$LICENSE_URL" "$WORK/sources/LICENSE" "${sha256sums[1]}"
+
+# The recipes as built: the PKGBUILD and .spec, with the version (and, for a
+# local source archive, its checksum) filled in
+RECIPES="$WORK/recipes"
+rm -rf "$RECIPES" && mkdir -p "$RECIPES"
+tarball_sha256="$(sha256sum "$TARBALL" | cut -d' ' -f1)"
+sed -e "s/^pkgver=.*/pkgver=$pkgver/" \
+    -e "s/'${sha256sums[0]}'/'$tarball_sha256'/" \
+    "$PACKAGING/arch/PKGBUILD" > "$RECIPES/PKGBUILD"
+[[ "$pkgver" == "$(source "$PACKAGING/arch/PKGBUILD"; echo "$pkgver")" ]] || sed -i 's/^pkgrel=.*/pkgrel=1/' "$RECIPES/PKGBUILD"
+sed -e "s/^Version:.*/Version:        $pkgver/" "$PACKAGING/rpm/snippets-manager.spec" > "$RECIPES/snippets-manager.spec"
 
 run() {
     # run <image> <script>: runs a script as root in a fresh container, with the
@@ -72,7 +100,7 @@ build_arch() {
     run docker.io/library/archlinux:latest '
         pacman -Syu --noconfirm --needed base-devel cmake qt6-base syntax-highlighting namcap >/dev/null
         useradd -m builder
-        mkdir /build && cp /packaging/arch/PKGBUILD /build/
+        mkdir /build && cp /work/recipes/PKGBUILD /build/
         cp /work/sources/$PKGNAME-$VERSION.tar.gz /work/sources/LICENSE /build/
         chown -R builder /build
         su builder -c "cd /build && makepkg --noconfirm --cleanbuild"
@@ -87,7 +115,8 @@ build_arch() {
         pacman -U --noconfirm /work/arch/$PKGNAME-$VERSION-*.pkg.tar.zst >/dev/null
         QT_QPA_PLATFORM=offscreen snippetmanager --version'
     cp "$WORK"/arch/*.pkg.tar.zst "$DIST/"
-    cp "$WORK/arch/.SRCINFO" "$PACKAGING/arch/.SRCINFO"
+    # The .SRCINFO only matches the repository's PKGBUILD when building its own release
+    [[ -n "$LOCAL_SOURCE" ]] || cp "$WORK/arch/.SRCINFO" "$PACKAGING/arch/.SRCINFO"
 }
 
 # ---------------------------------------------------------------------------
@@ -98,11 +127,11 @@ build_rpm() {
     rm -rf "$WORK/rpm" && mkdir -p "$WORK/rpm"
     run registry.fedoraproject.org/fedora:44 '
         dnf install -y -q rpm-build rpmdevtools dnf-plugins-core >/dev/null
-        dnf builddep -y -q /packaging/rpm/snippets-manager.spec >/dev/null
+        dnf builddep -y -q /work/recipes/snippets-manager.spec >/dev/null
         mkdir -p /root/rpmbuild/SOURCES
         cp /work/sources/$PKGNAME-$VERSION.tar.gz /root/rpmbuild/SOURCES/Snippets-Manager-$VERSION.tar.gz
         cp /work/sources/LICENSE /root/rpmbuild/SOURCES/LICENSE
-        rpmbuild -bb /packaging/rpm/snippets-manager.spec
+        rpmbuild -bb /work/recipes/snippets-manager.spec
         cp /root/rpmbuild/RPMS/*/*.rpm /work/rpm/
         chown -R "$OWNER" /work/rpm'
     info "Installing it in a fresh Fedora container"
