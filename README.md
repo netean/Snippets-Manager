@@ -69,7 +69,10 @@ It builds inside an Ubuntu 24.04 container (it needs podman or docker), so the A
 
 Running an AppImage needs FUSE 2 (`libfuse2`, `fuse2` or `fuse` depending on the distro); without it, run it with `--appimage-extract-and-run`.
 
- -- I do not like Flatpaks so I will never be making a Flatpak for  this 
+ > [!NOTE]
+>  I do not like Flatpaks (specifically the huge disk consumption of Flatpak runtimes) so I will never be making a Flatpak for this
+>  Nor will I be making a snap for this either - snaps are worse than Flatpaks!
+>  Therefore build from source or run download the appImage binary for X86_64 machines
 
 ## Building manually
 
