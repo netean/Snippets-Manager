@@ -7,13 +7,17 @@
 - **2.0 (current)**: what this README describes, on `main`. 2.0 upgrades 1.x databases when it first opens them (keeping a backup copy), so you can move up without losing your snippets. Download it from [Releases](../../releases).
 - **1.x**: the simple version, still available as release 1.3. It lives on the [`v1` branch](../../tree/v1) and gets bug and security fixes only.
 
+
+### Background 
 A very simple, very basic, KDE desktop application for storing and managing text snippets, code snippets, and short phrases with full Unicode support.
 
-I couldn't find anything that suited my needs: just a dead simple, very basic snippets tools for storing string. So I built one.. actually Claude did most of the coding, I just "directed it".
+I couldn't find anything that suited my needs: Nothing fancy, just a dead simple, very basic desktop only snippets tools for storing strings, maybe some code, maybe some rich text. No server, no web ui, no per user licensing, no self-hosting, just a database with a gui front end that matches my KDE Plasma theme.
 
-It's about 5000 lines of C++ and runs as a native QT application (supports themes)
+So I directed Claude to build it for me as my last coding was done 25 years ago and even then I've never done C or C++ coding before.
 
-Download and use the install script to compile it yourself, or use the AppImage binary release
+It's about 5000 lines of C++ and runs as a native QT6 application (supports themes) with a sqlite backend
+
+Download and use the install script to compile it yourself, or use the AppImage or the  .deb or .rpms (build with github actions)
 
 Used and tested on Fedora and CachyOs
 
