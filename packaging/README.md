@@ -21,8 +21,10 @@ when a version tag is pushed:
 1. Set the version in `CMakeLists.txt`: `project(SnippetManager VERSION 2.1 LANGUAGES CXX)`.
 2. Add a `## 2.1` section at the top of `CHANGELOG.md`. It becomes the release
    notes, followed by install instructions for each package.
-3. Commit those (through a pull request, as usual), then tag the commit on
-   `main` and push the tag:
+3. Commit those (through a pull request, as usual: `main` requires one, with
+   the build checks passing; repository admins can bypass that, e.g. to edit
+   the README directly), then tag the commit on `main` and push the tag.
+   Release tags can only be created, moved or deleted by repository admins:
    ```bash
    git switch main && git pull
    git tag -a 2.1 -m "Snippet Manager 2.1"

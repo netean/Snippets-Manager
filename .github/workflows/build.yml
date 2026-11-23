@@ -11,7 +11,10 @@ on:
 permissions:
   contents: read
 
-# Third-party actions are pinned to exact commits (the comment says which release)
+# Third-party actions are pinned to exact commits (the comment says which release).
+# The job names below are required checks for merging into main (repository
+# Settings > Rules > "Pull requests and passing checks for main"). If you rename
+# a job, update the ruleset too, or pull requests will wait for it forever.
 jobs:
   linux:
     name: Linux (Ubuntu 24.04, Qt 6.4)
